@@ -43,6 +43,7 @@ parser = argparse.ArgumentParser(description="Pretrain base model")
 parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('dummy' disables wandb logging)")
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
+parser.add_argument("--seed", type=int, default=42, help="random seed for model initialization")
 # FP8 training
 parser.add_argument("--fp8", action="store_true", help="enable FP8 training (requires H100+ GPU and torchao)")
 parser.add_argument("--fp8-recipe", type=str, default="tensorwise", choices=["rowwise", "tensorwise"], help="FP8 scaling recipe: tensorwise (faster, recommended) or rowwise (more accurate but slower)")
@@ -54,6 +55,7 @@ parser.add_argument("--max-seq-len", type=int, default=2048, help="max context l
 parser.add_argument("--window-pattern", type=str, default="SSSL", help="sliding window pattern tiled across layers: L=full, S=half context (e.g. 'SSL')")
 # Training horizon (only one used, in order of precedence)
 parser.add_argument("--num-iterations", type=int, default=-1, help="explicit number of optimization steps (-1 = disable)")
+parser.add_argument("--target-tokens", type=int, default=-1, help="calculate num_iterations to reach this many training tokens (-1 = disable)")
 parser.add_argument("--target-flops", type=float, default=-1.0, help="calculate num_iterations to reach target_flops (-1 = disable)")
 parser.add_argument("--target-param-data-ratio", type=float, default=12, help="calculate num_iterations to maintain data:param ratio (Chinchilla=20, -1 = disable)")
 # Optimization
@@ -84,6 +86,10 @@ user_config = vars(args).copy()  # for logging
 
 device_type = autodetect_device_type() if args.device_type == "" else args.device_type
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
+torch.manual_seed(args.seed)
+if device_type == "cuda":
+    torch.cuda.manual_seed_all(args.seed)
+print0(f"Random seed: {args.seed}")
 master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
 synchronize = torch.cuda.synchronize if device_type == "cuda" else lambda: None
 get_max_memory = torch.cuda.max_memory_allocated if device_type == "cuda" else lambda: 0
@@ -266,7 +272,14 @@ def get_scaling_params(m):
     scaling_params = params_counts['transformer_matrices'] + params_counts['lm_head']
     return scaling_params
 num_scaling_params = get_scaling_params(model)
-target_tokens = int(args.target_param_data_ratio * num_scaling_params) # optimal tokens for the model we are about to train
+if args.target_tokens > 0:
+    target_tokens = int(args.target_tokens)
+    target_tokens_source = "target_tokens"
+else:
+    target_tokens = int(args.target_param_data_ratio * num_scaling_params) # optimal tokens for the model we are about to train
+    target_tokens_source = "target_param_data_ratio"
+print0(f"Number of scaling parameters: {num_scaling_params:,}")
+print0(f"Target training tokens ({target_tokens_source}): {target_tokens:,}")
 
 # Our reference model is d12, this is where a lot of hyperparameters are tuned and then transfered to higher depths (muP style)
 d12_ref = build_model_meta(12) # creates the model on meta device
@@ -336,22 +349,35 @@ x, y, dataloader_state_dict = next(train_loader) # kick off load of the very fir
 # Calculate the number of iterations we will train for and set up the various schedulers
 
 # num_iterations: either it is given, or from target flops, or from target data:param ratio (in that order)
-assert args.num_iterations > 0 or args.target_param_data_ratio > 0 or args.target_flops > 0
+assert args.num_iterations > 0 or args.target_tokens > 0 or args.target_param_data_ratio > 0 or args.target_flops > 0
+horizon_source = None
 if args.num_iterations > 0:
     # Override num_iterations to a specific value if given
     num_iterations = args.num_iterations
+    horizon_source = "num_iterations"
     print0(f"Using user-provided number of iterations: {num_iterations:,}")
+elif args.target_tokens > 0:
+    num_iterations = math.ceil(args.target_tokens / total_batch_size)
+    horizon_source = "target_tokens"
+    print0(f"Calculated number of iterations from target tokens: {num_iterations:,}")
 elif args.target_flops > 0:
     # Calculate the number of iterations from the target flops (used in scaling laws analysis, e.g. runs/scaling_laws.sh)
     num_iterations = round(args.target_flops / (num_flops_per_token * total_batch_size))
+    horizon_source = "target_flops"
     print0(f"Calculated number of iterations from target FLOPs: {num_iterations:,}")
 elif args.target_param_data_ratio > 0:
     # Calculate the number of iterations from the target param data ratio (the most common use case)
     num_iterations = target_tokens // total_batch_size
+    horizon_source = "target_param_data_ratio"
     print0(f"Calculated number of iterations from target data:param ratio: {num_iterations:,}")
 else:
     raise ValueError("No training horizon specified")
 total_tokens = total_batch_size * num_iterations # the actual number of tokens we will train for
+D_target = target_tokens if horizon_source in ("target_tokens", "target_param_data_ratio") else None
+D_actual = total_tokens
+print0(f"Horizon source: {horizon_source}")
+print0(f"D_target: {D_target:,}" if D_target is not None else "D_target: null")
+print0(f"D_actual: {D_actual:,}")
 print0(f"Total number of training tokens: {total_tokens:,}")
 print0(f"Tokens : Scaling params ratio: {total_batch_size * num_iterations / num_scaling_params:.2f}") # e.g. Chinchilla was ~20
 print0(f"Total training FLOPs estimate: {num_flops_per_token * total_tokens:e}")
@@ -605,6 +631,11 @@ get_report().log(section="Base model training", data=[
     user_config, # CLI args
     { # stats about the training setup
         "Number of parameters": num_params,
+        "Number of scaling parameters": num_scaling_params,
+        "Seed": args.seed,
+        "Horizon source": horizon_source,
+        "D_target": D_target,
+        "D_actual": D_actual,
         "Number of FLOPs per token": f"{num_flops_per_token:e}",
         "Calculated number of iterations": num_iterations,
         "Number of training tokens": total_tokens,
