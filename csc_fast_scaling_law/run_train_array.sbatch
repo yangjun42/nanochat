@@ -93,6 +93,8 @@ PY
 
 export CSC_DEPTH="$DEPTH"
 export CSC_RECIPE_BAND="$RECIPE_BAND"
+ASPECT_RATIO="${ASPECT_RATIO:-64}"
+HEAD_DIM="${HEAD_DIM:-128}"
 checkpoint_dir="${NANOCHAT_BASE_DIR}/base_checkpoints/${MODEL_TAG}"
 if [ -d "$checkpoint_dir" ] && find "$checkpoint_dir" -maxdepth 1 -type f | grep -q .; then
   echo "Checkpoint appears to exist, skipping: $checkpoint_dir"
@@ -125,6 +127,8 @@ run_stage "$STAGE" \
     --save-every=-1 \
     --num-iterations="$NUM_ITERATIONS" \
     --depth="$DEPTH" \
+    --aspect-ratio="$ASPECT_RATIO" \
+    --head-dim="$HEAD_DIM" \
     "${seed_args[@]}"
 rc="$?"
 set -e

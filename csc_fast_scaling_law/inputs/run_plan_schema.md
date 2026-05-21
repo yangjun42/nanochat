@@ -22,6 +22,11 @@ required by the artifact contract. The reference-grid plan uses:
 - `planned_model_depth`, `planned_data_tokens`, `planned_total_batch_size`:
   planned controls used to create the row. The measured `N_scaling` and
   `D_actual` in merged metrics remain the authoritative fitting coordinates.
+- `aspect_ratio`, `head_dim`: optional architecture controls passed to
+  `scripts.base_train`. When omitted, the runner uses nanochat defaults
+  `aspect_ratio=64` and `head_dim=128`. Use
+  `python -m csc_fast_scaling_law.model_size_probe` to choose candidate
+  architectures before submitting GPU jobs.
 
 Tracked example plans:
 
@@ -30,3 +35,6 @@ Tracked example plans:
 - `roihu_reference_depthspread_3x3_seed0.csv`: second 3x3 reference grid
   using depths `1,4,8` after the first real slice showed depth `1,2,4`
   gives uneven measured `N_scaling` spacing.
+- `roihu_reference_sizeprobe_3x3_seed0.csv`: preflight-selected 3x3
+  candidate using depths `2,3,7`, `aspect_ratio=48`, and `head_dim=128`
+  from the non-training size probe.

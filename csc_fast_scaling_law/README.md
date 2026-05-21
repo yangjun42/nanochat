@@ -22,6 +22,26 @@ The scripts prepend `csc_fast_scaling_law/wandb_stub` to `PYTHONPATH` because th
 Roihu PyTorch container can contain an unrelated broken `wandb`/protobuf
 combination. This keeps `--run=dummy` jobs independent of system `wandb`.
 
+## Model-Size Preflight
+
+Before submitting a new scaling-law grid, probe candidate nanochat architectures
+locally or on Roihu without training:
+
+```bash
+python -m csc_fast_scaling_law.model_size_probe \
+  --depths 1-16 \
+  --aspect-ratios 48,64,80,96,112,128 \
+  --max-n-scaling 50000000 \
+  --out /tmp/nanochat_fsl_size_probe.csv \
+  --print-triplet
+```
+
+The printed triplet is a non-degenerate, approximately geometric `N_scaling`
+proposal under the chosen size bound. Add its `depth`, `aspect_ratio`, and
+`head_dim` columns to the run-plan CSV; `run_train_array.sbatch` passes these
+controls through to `scripts.base_train`. The measured training log still
+remains authoritative for `N_scaling`.
+
 ## Smoke Flow
 
 ```bash

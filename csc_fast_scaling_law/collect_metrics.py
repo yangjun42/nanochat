@@ -15,6 +15,8 @@ METRIC_FIELDS = [
     "split",
     "recipe_band",
     "depth",
+    "aspect_ratio",
+    "head_dim",
     "seed",
     "num_iterations",
     "target_tokens",
