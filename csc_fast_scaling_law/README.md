@@ -33,6 +33,7 @@ python -m csc_fast_scaling_law.model_size_probe \
   --aspect-ratios 48,64,80,96,112,128 \
   --max-n-scaling 50000000 \
   --out /tmp/nanochat_fsl_size_probe.csv \
+  --triplet-out /tmp/nanochat_fsl_triplets.csv \
   --print-triplet
 ```
 
@@ -41,6 +42,15 @@ proposal under the chosen size bound. Add its `depth`, `aspect_ratio`, and
 `head_dim` columns to the run-plan CSV; `run_train_array.sbatch` passes these
 controls through to `scripts.base_train`. The measured training log still
 remains authoritative for `N_scaling`.
+
+A wider fixed-control scan found the next candidate plan
+`inputs/roihu_reference_sizeprobe72_3x3_seed0.csv`:
+
+- depths `2,4,7`;
+- `aspect_ratio=72`;
+- `head_dim=128`;
+- preflight `N_scaling` values `9,961,496`, `19,660,872`, `38,797,504`;
+- preflight geometric relative error about `0.000178`.
 
 ## Smoke Flow
 

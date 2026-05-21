@@ -38,3 +38,7 @@ Tracked example plans:
 - `roihu_reference_sizeprobe_3x3_seed0.csv`: preflight-selected 3x3
   candidate using depths `2,3,7`, `aspect_ratio=48`, and `head_dim=128`
   from the non-training size probe.
+- `roihu_reference_sizeprobe72_3x3_seed0.csv`: next preflight-selected 3x3
+  candidate using depths `2,4,7`, `aspect_ratio=72`, and `head_dim=128`.
+  The fixed-control model-size scan estimates a much smaller geometric spacing
+  error before training.

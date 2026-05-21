@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from csc_fast_scaling_law.model_size_probe import (
     make_model_size_row,
+    rank_geometric_triplets,
     select_geometric_triplet,
 )
 
@@ -54,6 +55,47 @@ def test_select_geometric_triplet_prefers_fixed_controls_over_tiny_spacing_gain(
     selected = select_geometric_triplet(rows)
 
     assert [row["aspect_ratio"] for row in selected] == [48, 48, 48]
+
+
+def test_rank_geometric_triplets_returns_explainable_top_candidates() -> None:
+    rows = [
+        {"depth": 2, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 100.0},
+        {"depth": 3, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 230.0},
+        {"depth": 7, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 520.0},
+        {"depth": 2, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 100.0},
+        {"depth": 5, "aspect_ratio": 80, "head_dim": 128, "N_scaling": 220.0},
+        {"depth": 8, "aspect_ratio": 96, "head_dim": 128, "N_scaling": 484.0},
+    ]
+
+    ranked = rank_geometric_triplets(rows, top_k=2)
+
+    assert len(ranked) == 2
+    assert ranked[0]["rank"] == 1
+    assert ranked[0]["control_changes"] == 0
+    assert ranked[0]["depths"] == "2,3,7"
+    assert ranked[0]["aspect_ratios"] == "48,48,48"
+    assert ranked[0]["n_values"] == "100,230,520"
+    assert ranked[0]["n_ratio_01"] == 2.3
+    assert ranked[0]["n_ratio_12"] == 520.0 / 230.0
+    assert ranked[0]["spacing_error"] > 0
+    assert ranked[1]["rank"] == 2
+
+
+def test_rank_geometric_triplets_can_restrict_to_fixed_controls() -> None:
+    rows = [
+        {"depth": 2, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 100.0},
+        {"depth": 3, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 230.0},
+        {"depth": 7, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 520.0},
+        {"depth": 2, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 100.0},
+        {"depth": 5, "aspect_ratio": 80, "head_dim": 128, "N_scaling": 220.0},
+        {"depth": 8, "aspect_ratio": 96, "head_dim": 128, "N_scaling": 484.0},
+    ]
+
+    ranked = rank_geometric_triplets(rows, max_control_changes=0)
+
+    assert ranked
+    assert {row["control_changes"] for row in ranked} == {0}
+    assert ranked[0]["aspect_ratios"] == "48,48,48"
 
 
 def test_select_geometric_triplet_obeys_max_value_bound() -> None:
