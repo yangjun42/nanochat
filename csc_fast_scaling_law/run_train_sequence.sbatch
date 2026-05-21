@@ -17,7 +17,9 @@ set -uo pipefail
 
 PROJECT="${CSC_PROJECT:-project_2017828}"
 USER_NAME="${CSC_USER:-${USER:-yangjun1}}"
-REPO_DIR="${NANOCHAT_CHECKOUT:-/scratch/${PROJECT}/${USER_NAME}/nanochat}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_DIR="${NANOCHAT_CHECKOUT:-${DEFAULT_REPO_DIR}}"
 PLAN_CSV="${PLAN_CSV:-${REPO_DIR}/csc_fast_scaling_law/inputs/smoke_plan.csv}"
 ROW_START="${ROW_START:-1}"
 CONTINUE_ON_ERROR="${CONTINUE_ON_ERROR:-0}"

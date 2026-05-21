@@ -15,7 +15,9 @@ set -uo pipefail
 
 PROJECT="${CSC_PROJECT:-project_2017828}"
 USER_NAME="${CSC_USER:-${USER:-yangjun1}}"
-REPO_DIR="${NANOCHAT_CHECKOUT:-/scratch/${PROJECT}/${USER_NAME}/nanochat}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_DIR="${NANOCHAT_CHECKOUT:-${DEFAULT_REPO_DIR}}"
 CACHE_ROOT="${NANOCHAT_CACHE_ROOT:-/scratch/${PROJECT}/${USER_NAME}/nanochat-cache}"
 VENV_DIR="${NANOCHAT_VENV:-/scratch/${PROJECT}/venv/nanochat-pytorch210}"
 CAMPAIGN_ID="${CAMPAIGN_ID:-fsl-${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-manual}}}"

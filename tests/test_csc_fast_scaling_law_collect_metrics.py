@@ -245,6 +245,22 @@ def test_sequential_slurm_wrappers_reuse_array_wrappers() -> None:
     assert "CONTINUE_ON_ERROR" in eval_seq
 
 
+def test_slurm_wrappers_default_to_their_own_checkout() -> None:
+    root = Path(__file__).resolve().parents[1]
+    scripts = [
+        root / "csc_fast_scaling_law" / "run_train_array.sbatch",
+        root / "csc_fast_scaling_law" / "run_eval_array.sbatch",
+        root / "csc_fast_scaling_law" / "run_train_sequence.sbatch",
+        root / "csc_fast_scaling_law" / "run_eval_sequence.sbatch",
+    ]
+
+    for script in scripts:
+        text = script.read_text(encoding="utf-8")
+        assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in text
+        assert 'DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"' in text
+        assert 'REPO_DIR="${NANOCHAT_CHECKOUT:-${DEFAULT_REPO_DIR}}"' in text
+
+
 def test_sync_results_keeps_train_and_eval_stage_metrics_separate() -> None:
     root = Path(__file__).resolve().parents[1]
     sync_script = (root / "csc_fast_scaling_law" / "sync_results.sh").read_text(encoding="utf-8")
