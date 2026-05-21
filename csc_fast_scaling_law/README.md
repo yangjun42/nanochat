@@ -57,6 +57,22 @@ A wider fixed-control scan found the next candidate plan
 - `is_exact_geometric=False` with integer cross-product residual
   `68,706,894,400`.
 
+An expanded formula-only exact search over depths `1-32`, aspect ratios
+`1-256`, and head dimensions `32,64,96,128,160,192,224,256` found the tracked
+candidate `inputs/roihu_reference_exactprobe_3x3_seed0.csv`:
+
+- model-axis controls
+  `(depth=4, aspect_ratio=1, head_dim=64)`,
+  `(depth=2, aspect_ratio=49, head_dim=32)`,
+  `(depth=1, aspect_ratio=225, head_dim=32)`;
+- preflight `N_scaling` values `2,293,784`, `4,587,568`, `9,175,136`;
+- exact preflight multipliers `2.0` and `2.0`;
+- `is_exact_geometric=True` with integer cross-product residual `0`.
+
+Because this candidate changes multiple architecture controls across the model
+axis, run a smoke slice before a full 3x3 submission and treat measured
+training logs as authoritative.
+
 ## Smoke Flow
 
 ```bash

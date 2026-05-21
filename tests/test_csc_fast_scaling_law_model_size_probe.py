@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from csc_fast_scaling_law.model_size_probe import (
+    make_formula_model_size_row,
     make_model_size_row,
+    make_model_size_table,
     rank_geometric_triplets,
     select_geometric_triplet,
 )
@@ -24,6 +28,51 @@ def test_make_model_size_row_matches_base_train_architecture_rounding() -> None:
     assert row["n_head"] == 1
     assert row["N_total"] > row["N_scaling"] > 0
     assert row["flops_per_token_est"] > 6 * row["N_scaling"]
+
+
+def test_formula_model_size_row_matches_meta_model_counts() -> None:
+    meta_row = make_model_size_row(
+        depth=7,
+        aspect_ratio=72,
+        head_dim=128,
+        max_seq_len=2048,
+        vocab_size=32768,
+        window_pattern="L",
+    )
+
+    formula_row = make_formula_model_size_row(
+        depth=7,
+        aspect_ratio=72,
+        head_dim=128,
+        max_seq_len=2048,
+        vocab_size=32768,
+        window_pattern="L",
+    )
+
+    assert formula_row == meta_row
+
+
+def test_model_size_table_can_use_formula_counts() -> None:
+    rows = make_model_size_table(
+        depths=[2, 4, 7],
+        aspect_ratios=[72],
+        head_dim=128,
+        use_formula_counts=True,
+    )
+
+    assert [row["N_scaling"] for row in rows] == [9_961_496, 19_660_872, 38_797_504]
+
+
+def test_model_size_table_can_scan_multiple_head_dims() -> None:
+    rows = make_model_size_table(
+        depths=[1],
+        aspect_ratios=[64],
+        head_dims=[64, 128],
+        use_formula_counts=True,
+    )
+
+    assert [row["head_dim"] for row in rows] == [64, 128]
+    assert [row["n_embd"] for row in rows] == [64, 128]
 
 
 def test_select_geometric_triplet_prefers_even_measured_n_scaling_ratios() -> None:
@@ -105,6 +154,34 @@ def test_rank_geometric_triplets_marks_exact_integer_triples() -> None:
 
     assert ranked[0]["is_exact_geometric"] is True
     assert ranked[0]["geometric_cross_product_residual"] == 0
+
+
+def test_rank_geometric_triplets_can_filter_to_exact_geometry() -> None:
+    rows = [
+        {"depth": 1, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 100},
+        {"depth": 2, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 200},
+        {"depth": 4, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 400},
+        {"depth": 2, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 9_961_496},
+        {"depth": 4, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 19_660_872},
+        {"depth": 7, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 38_797_504},
+    ]
+
+    ranked = rank_geometric_triplets(rows, exact_only=True, max_control_changes=0)
+
+    assert len(ranked) == 1
+    assert ranked[0]["is_exact_geometric"] is True
+    assert ranked[0]["n_values"] == "100,200,400"
+
+
+def test_rank_geometric_triplets_exact_only_rejects_near_misses() -> None:
+    rows = [
+        {"depth": 2, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 9_961_496},
+        {"depth": 4, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 19_660_872},
+        {"depth": 7, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 38_797_504},
+    ]
+
+    with pytest.raises(ValueError, match="no exact geometric size triplet"):
+        rank_geometric_triplets(rows, exact_only=True)
 
 
 def test_rank_geometric_triplets_can_restrict_to_fixed_controls() -> None:

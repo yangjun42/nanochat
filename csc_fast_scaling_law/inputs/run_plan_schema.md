@@ -43,3 +43,10 @@ Tracked example plans:
   The fixed-control model-size scan estimates a much smaller geometric spacing
   error before training, but its `is_exact_geometric` probe flag is still
   `False`.
+- `roihu_reference_exactprobe_3x3_seed0.csv`: exact-geometric preflight 3x3
+  candidate using explicit model-axis controls
+  `(depth=4, aspect_ratio=1, head_dim=64)`,
+  `(depth=2, aspect_ratio=49, head_dim=32)`, and
+  `(depth=1, aspect_ratio=225, head_dim=32)`. Its preflight `N_scaling`
+  values have exact ratios `2.0` and `2.0`; smoke this unusual control grid
+  before a full run.

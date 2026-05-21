@@ -105,6 +105,85 @@ def _geometric_cross_product_residual(raw_values: list[Any], values: list[float]
     return values[1] * values[1] - values[0] * values[2]
 
 
+def _padded_vocab_size(vocab_size: int, pad_vocab_size_to: int = 64) -> int:
+    return ((vocab_size + pad_vocab_size_to - 1) // pad_vocab_size_to) * pad_vocab_size_to
+
+
+def _value_embedding_layers(depth: int) -> int:
+    return (depth + 1) // 2
+
+
+def _attention_flops_per_token(
+    *,
+    depth: int,
+    model_dim: int,
+    max_seq_len: int,
+    window_pattern: str,
+) -> int:
+    pattern = window_pattern.upper()
+    if any(char not in "SL" for char in pattern):
+        raise ValueError("window_pattern must contain only S and L")
+    long_window = max_seq_len
+    short_window = ((max_seq_len + 127) // 512) * 128
+    total = 0
+    for layer_idx in range(depth):
+        char = pattern[layer_idx % len(pattern)]
+        window = long_window if char == "L" or layer_idx == depth - 1 else short_window
+        total += 12 * model_dim * min(window, max_seq_len)
+    return total
+
+
+def make_formula_model_size_row(
+    *,
+    depth: int,
+    aspect_ratio: int = 64,
+    head_dim: int = 128,
+    max_seq_len: int = 2048,
+    vocab_size: int = 32768,
+    window_pattern: str = "L",
+) -> dict[str, int | float | str]:
+    """Return nanochat size metadata from architecture formulas only."""
+
+    if min(depth, aspect_ratio, head_dim, max_seq_len, vocab_size) <= 0:
+        raise ValueError("depth, aspect_ratio, head_dim, max_seq_len, and vocab_size must be positive")
+
+    model_dim = _rounded_model_dim(depth=depth, aspect_ratio=aspect_ratio, head_dim=head_dim)
+    n_head = model_dim // head_dim
+    padded_vocab_size = _padded_vocab_size(vocab_size)
+    value_embedding_layers = _value_embedding_layers(depth)
+    wte = padded_vocab_size * model_dim
+    value_embeds = value_embedding_layers * padded_vocab_size * model_dim
+    lm_head = padded_vocab_size * model_dim
+    transformer_matrices = depth * 12 * model_dim * model_dim + value_embedding_layers * 12 * n_head
+    scalars = 2 * depth + 26
+    n_scaling = transformer_matrices + lm_head
+    total = wte + value_embeds + lm_head + transformer_matrices + scalars
+    flops_per_token_est = 6 * n_scaling + _attention_flops_per_token(
+        depth=depth,
+        model_dim=model_dim,
+        max_seq_len=max_seq_len,
+        window_pattern=window_pattern,
+    )
+    return {
+        "depth": depth,
+        "aspect_ratio": aspect_ratio,
+        "head_dim": head_dim,
+        "max_seq_len": max_seq_len,
+        "vocab_size": vocab_size,
+        "window_pattern": window_pattern,
+        "n_embd": model_dim,
+        "n_head": n_head,
+        "N_total": total,
+        "N_scaling": n_scaling,
+        "flops_per_token_est": flops_per_token_est,
+        "wte": wte,
+        "value_embeds": value_embeds,
+        "lm_head": lm_head,
+        "transformer_matrices": transformer_matrices,
+        "scalars": scalars,
+    }
+
+
 def make_model_size_row(
     *,
     depth: int,
@@ -160,17 +239,21 @@ def make_model_size_table(
     depths: Iterable[int],
     aspect_ratios: Iterable[int],
     head_dim: int = 128,
+    head_dims: Iterable[int] | None = None,
     max_seq_len: int = 2048,
     vocab_size: int = 32768,
     window_pattern: str = "L",
+    use_formula_counts: bool = False,
 ) -> list[dict[str, int | float | str]]:
     rows = []
-    for aspect_ratio, depth in itertools.product(sorted(aspect_ratios), sorted(depths)):
+    row_builder = make_formula_model_size_row if use_formula_counts else make_model_size_row
+    scanned_head_dims = [head_dim] if head_dims is None else sorted(head_dims)
+    for head_dim_value, aspect_ratio, depth in itertools.product(scanned_head_dims, sorted(aspect_ratios), sorted(depths)):
         rows.append(
-            make_model_size_row(
+            row_builder(
                 depth=depth,
                 aspect_ratio=aspect_ratio,
-                head_dim=head_dim,
+                head_dim=head_dim_value,
                 max_seq_len=max_seq_len,
                 vocab_size=vocab_size,
                 window_pattern=window_pattern,
@@ -204,6 +287,33 @@ def select_geometric_triplet(
     return ranked[0]["rows"]
 
 
+def _exact_geometric_combinations(
+    candidates: Iterable[dict[str, Any]],
+    *,
+    value_key: str,
+) -> Iterable[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
+    by_value: dict[int, list[dict[str, Any]]] = {}
+    for row in candidates:
+        exact_value = _as_exact_int(row[value_key])
+        if exact_value is None:
+            continue
+        by_value.setdefault(exact_value, []).append(row)
+
+    values = sorted(by_value)
+    for n0 in values:
+        for n1 in values:
+            if n1 <= n0:
+                continue
+            n2_numerator = n1 * n1
+            if n2_numerator % n0 != 0:
+                continue
+            n2 = n2_numerator // n0
+            if n2 <= n1 or n2 not in by_value:
+                continue
+            for first, second, third in itertools.product(by_value[n0], by_value[n1], by_value[n2]):
+                yield (first, second, third)
+
+
 def rank_geometric_triplets(
     rows: Iterable[dict[str, Any]],
     *,
@@ -213,6 +323,7 @@ def rank_geometric_triplets(
     min_total_ratio: float = 2.0,
     max_value: float | None = None,
     max_control_changes: int | None = None,
+    exact_only: bool = False,
     top_k: int = 10,
 ) -> list[dict[str, Any]]:
     """Rank candidate model-size triplets by fixed controls, spacing, and span."""
@@ -227,7 +338,9 @@ def rank_geometric_triplets(
     if len(candidates) < 3:
         raise ValueError("at least three positive size rows are required")
 
-    if max_control_changes == 0:
+    if exact_only:
+        combinations_iter = _exact_geometric_combinations(candidates, value_key=value_key)
+    elif max_control_changes == 0:
         grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
         for row in candidates:
             grouped.setdefault(tuple(row.get(key) for key in control_keys), []).append(row)
@@ -248,12 +361,16 @@ def rank_geometric_triplets(
         log_ratios = [math.log(values[1] / values[0]), math.log(values[2] / values[1])]
         spacing_error = abs(log_ratios[1] - log_ratios[0])
         cross_product_residual = _geometric_cross_product_residual(raw_values, values)
+        if exact_only and cross_product_residual != 0:
+            continue
         control_changes = len({tuple(row.get(key) for key in control_keys) for row in ordered}) - 1
         if max_control_changes is not None and control_changes > max_control_changes:
             continue
         span = math.log(values[2] / values[0])
         score = (control_changes, spacing_error, -span)
         scored.append((score, ordered, values, [values[1] / values[0], values[2] / values[1]], cross_product_residual))
+    if not scored and exact_only:
+        raise ValueError("no exact geometric size triplet satisfies the minimum ratio constraints")
     if not scored:
         raise ValueError("no non-degenerate size triplet satisfies the minimum ratio constraints")
 
@@ -320,6 +437,7 @@ def main() -> None:
     parser.add_argument("--depths", default="1-12", help="Comma list and/or inclusive ranges, e.g. 1,2,4 or 1-12.")
     parser.add_argument("--aspect-ratios", default="64", help="Comma list and/or inclusive ranges.")
     parser.add_argument("--head-dim", type=int, default=128)
+    parser.add_argument("--head-dims", default=None, help="Optional comma list and/or inclusive ranges of head dims.")
     parser.add_argument("--max-seq-len", type=int, default=2048)
     parser.add_argument("--vocab-size", type=int, default=32768)
     parser.add_argument("--window-pattern", default="L")
@@ -331,15 +449,19 @@ def main() -> None:
     parser.add_argument("--min-total-ratio", type=float, default=2.0)
     parser.add_argument("--max-n-scaling", type=float, default=None)
     parser.add_argument("--max-control-changes", type=int, default=None)
+    parser.add_argument("--formula-counts", action="store_true", help="Use formula-only nanochat size counts.")
+    parser.add_argument("--exact-only", action="store_true", help="Only rank exactly geometric integer triplets.")
     args = parser.parse_args()
 
     rows = make_model_size_table(
         depths=_parse_int_list(args.depths),
         aspect_ratios=_parse_int_list(args.aspect_ratios),
         head_dim=args.head_dim,
+        head_dims=_parse_int_list(args.head_dims) if args.head_dims else None,
         max_seq_len=args.max_seq_len,
         vocab_size=args.vocab_size,
         window_pattern=args.window_pattern,
+        use_formula_counts=args.formula_counts,
     )
     write_size_table(args.out, rows)
     ranked_triplets = rank_geometric_triplets(
@@ -348,6 +470,7 @@ def main() -> None:
         min_total_ratio=args.min_total_ratio,
         max_value=args.max_n_scaling,
         max_control_changes=args.max_control_changes,
+        exact_only=args.exact_only,
         top_k=args.top_k,
     )
     if args.triplet_out:
