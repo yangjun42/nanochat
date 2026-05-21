@@ -73,6 +73,15 @@ Because this candidate changes multiple architecture controls across the model
 axis, run a smoke slice before a full 3x3 submission and treat measured
 training logs as authoritative.
 
+The current revised real-validation path is the tracked final-verification plan
+`inputs/roihu_reference_sizeprobe72_finalverify_seed1_2.csv`. It keeps the
+fixed-control sizeprobe72 architecture (`aspect_ratio=72`, `head_dim=128`) and
+reruns the largest-data (`d_index=2`) competitors at depths `2,4,7` for seeds
+`1` and `2`. The seed-0 middle-model winner is marked with
+`verification_role=observed_best`; the endpoints are
+`same_data_competitor`. Judge this plan by held-out BPB/final verification, not
+by treating a fitted surface as its own referee.
+
 ## Smoke Flow
 
 ```bash

@@ -50,3 +50,7 @@ Tracked example plans:
   `(depth=1, aspect_ratio=225, head_dim=32)`. Its preflight `N_scaling`
   values have exact ratios `2.0` and `2.0`; smoke this unusual control grid
   before a full run.
+- `roihu_reference_sizeprobe72_finalverify_seed1_2.csv`: final-verification
+  replicate of the recommended fixed-control path. It reruns the sizeprobe72
+  `d_index=2` model competitors at seeds `1` and `2`, and includes source
+  campaign/stage/loss metadata plus `verification_role`.
