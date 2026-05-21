@@ -27,3 +27,6 @@ Tracked example plans:
 
 - `smoke_plan.csv`: two-row train/eval harness smoke check.
 - `roihu_reference_3x3_seed0.csv`: first 3x3 reference grid after smoke.
+- `roihu_reference_depthspread_3x3_seed0.csv`: second 3x3 reference grid
+  using depths `1,4,8` after the first real slice showed depth `1,2,4`
+  gives uneven measured `N_scaling` spacing.
