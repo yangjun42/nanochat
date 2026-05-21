@@ -1,0 +1,4 @@
+stage,split,recipe_band,depth,seed,num_iterations,target_tokens,total_batch_size,device_batch_size,max_seq_len,warmup_steps,fp8,window_pattern,model_tag
+fsl_smoke_d1_i64_s0,smoke,canonical,1,0,64,33554432,524288,16,2048,40,1,L,fsl-smoke-d1-i64-s0
+fsl_smoke_d8_i256_s0,smoke,canonical,8,0,256,134217728,524288,16,2048,40,1,L,fsl-smoke-d8-i256-s0
+
