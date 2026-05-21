@@ -82,6 +82,14 @@ reruns the largest-data (`d_index=2`) competitors at depths `2,4,7` for seeds
 `same_data_competitor`. Judge this plan by held-out BPB/final verification, not
 by treating a fitted surface as its own referee.
 
+Completed campaign `fsl-sizeprobe72-finalverify-seq-20260522-0037` ran all
+six train rows and all six BPB eval rows successfully on `gpumedium`. Seed 1
+confirms the depth-4 candidate (`val_bpb=1.142690`), but seed 2 favors depth 7
+(`val_bpb=1.097519`). The two-seed mean final BPB is depth 2: `1.230689`,
+depth 4: `1.164960`, and depth 7: `1.146944`. Treat the sizeprobe72 path as
+still referee-ready, but do not lock the middle-depth allocation without more
+seeded final verification against the depth-7 same-data competitor.
+
 ## Smoke Flow
 
 ```bash
