@@ -90,6 +90,11 @@ depth 4: `1.164960`, and depth 7: `1.146944`. Treat the sizeprobe72 path as
 still referee-ready, but do not lock the middle-depth allocation without more
 seeded final verification against the depth-7 same-data competitor.
 
+The next tracked plan is
+`inputs/roihu_reference_sizeprobe72_depth47_finalverify_seed3_5.csv`. It keeps
+the same largest-data fixed-control setting and reruns only the unsettled
+depth-4/depth-7 contenders at seeds `3`, `4`, and `5`.
+
 ## Smoke Flow
 
 ```bash

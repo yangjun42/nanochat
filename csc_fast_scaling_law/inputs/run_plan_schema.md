@@ -3,7 +3,7 @@
 Required columns:
 
 - `stage`: unique row identifier.
-- `split`: `smoke`, `reference`, `heldout`, or `verification`.
+- `split`: `smoke`, `reference`, `heldout`, or `final_verify`.
 - `recipe_band`: usually `canonical`; use another value only when intentionally changing the recipe.
 - `depth`: nanochat model depth.
 - `seed`: training seed.
@@ -54,3 +54,8 @@ Tracked example plans:
   replicate of the recommended fixed-control path. It reruns the sizeprobe72
   `d_index=2` model competitors at seeds `1` and `2`, and includes source
   campaign/stage/loss metadata plus `verification_role`.
+- `roihu_reference_sizeprobe72_depth47_finalverify_seed3_5.csv`:
+  seed-extension final-verification plan for the unresolved same-data
+  depth-4/depth-7 contenders. It keeps `d_index=2`, `aspect_ratio=72`,
+  `head_dim=128`, and 256 training iterations, and runs seeds `3`, `4`, and
+  `5`.
