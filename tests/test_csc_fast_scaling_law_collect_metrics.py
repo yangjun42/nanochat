@@ -228,6 +228,23 @@ def test_slurm_wrappers_use_local_wandb_stub() -> None:
     assert "def init" in stub.read_text(encoding="utf-8")
 
 
+def test_sequential_slurm_wrappers_reuse_array_wrappers() -> None:
+    root = Path(__file__).resolve().parents[1]
+    train_seq = (root / "csc_fast_scaling_law" / "run_train_sequence.sbatch").read_text(
+        encoding="utf-8"
+    )
+    eval_seq = (root / "csc_fast_scaling_law" / "run_eval_sequence.sbatch").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run_train_array.sbatch" in train_seq
+    assert "run_eval_array.sbatch" in eval_seq
+    assert "ROW_START" in train_seq
+    assert "ROW_END" in train_seq
+    assert "SLURM_ARRAY_TASK_ID" in train_seq
+    assert "CONTINUE_ON_ERROR" in eval_seq
+
+
 def test_sync_results_keeps_train_and_eval_stage_metrics_separate() -> None:
     root = Path(__file__).resolve().parents[1]
     sync_script = (root / "csc_fast_scaling_law" / "sync_results.sh").read_text(encoding="utf-8")

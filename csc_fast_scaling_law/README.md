@@ -65,3 +65,29 @@ sbatch --array=1-2%1 csc_fast_scaling_law/run_eval_array.sbatch
 
 Use `csc_fast_scaling_law/monitor_roihu.sh` from a local machine to inspect
 queue state, recent accounting, and the latest merged metrics.
+
+## Sequential Fallback
+
+If Slurm rejects an array with `AssocMaxSubmitJobLimit`, use the sequential
+wrappers for small grids. They submit a single Slurm job and run the selected
+plan rows one after another on the same allocation while reusing the same
+per-row array wrappers:
+
+```bash
+CAMPAIGN_ID=fsl-sizeprobe72-3x3-YYYYMMDD-HHMM \
+PLAN_CSV=/scratch/project_2017828/$USER/nanochat/csc_fast_scaling_law/inputs/roihu_reference_sizeprobe72_3x3_seed0.csv \
+NANOCHAT_BASE_DIR=/scratch/project_2017828/$USER/nanochat-cache/$CAMPAIGN_ID \
+sbatch --partition=gpuinteractive --time=02:00:00 \
+  csc_fast_scaling_law/run_train_sequence.sbatch
+
+# After training succeeds:
+CAMPAIGN_ID=fsl-sizeprobe72-3x3-YYYYMMDD-HHMM \
+PLAN_CSV=/scratch/project_2017828/$USER/nanochat/csc_fast_scaling_law/inputs/roihu_reference_sizeprobe72_3x3_seed0.csv \
+NANOCHAT_BASE_DIR=/scratch/project_2017828/$USER/nanochat-cache/$CAMPAIGN_ID \
+sbatch --partition=gpuinteractive --time=01:00:00 \
+  csc_fast_scaling_law/run_eval_sequence.sbatch
+```
+
+Set `ROW_START` and `ROW_END` to run a slice, for example `ROW_START=1
+ROW_END=3`. Keep temporary plan CSVs on shared scratch or in the checkout, not
+login-node `/tmp`, because compute nodes cannot see login-local files.
