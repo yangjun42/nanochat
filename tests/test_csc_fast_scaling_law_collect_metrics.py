@@ -201,3 +201,12 @@ def test_collect_campaign_parses_current_base_train_parameter_table(tmp_path: Pa
     assert rows[0]["flops_per_token_est"] == "1234000.0"
     assert rows[0]["train_bpb_final"] == "1.2345"
     assert rows[0]["val_bpb_final"] == "1.111"
+
+
+def test_slurm_wrappers_use_local_wandb_stub() -> None:
+    root = Path(__file__).resolve().parents[1]
+    train_script = (root / "csc_fast_scaling_law" / "run_train_array.sbatch").read_text(encoding="utf-8")
+    eval_script = (root / "csc_fast_scaling_law" / "run_eval_array.sbatch").read_text(encoding="utf-8")
+
+    assert "csc_fast_scaling_law/wandb_stub" in train_script
+    assert "csc_fast_scaling_law/wandb_stub" in eval_script

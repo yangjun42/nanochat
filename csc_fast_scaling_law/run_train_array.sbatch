@@ -42,7 +42,7 @@ if [ ! -d "$VENV_DIR" ]; then
   exit 2
 fi
 source "$VENV_DIR/bin/activate"
-export PYTHONPATH="$REPO_DIR:${PYTHONPATH:-}"
+export PYTHONPATH="$REPO_DIR/csc_fast_scaling_law/wandb_stub:$REPO_DIR:${PYTHONPATH:-}"
 export WANDB_MODE="${WANDB_MODE:-disabled}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export TOKENIZERS_PARALLELISM=false
@@ -135,4 +135,3 @@ python -m csc_fast_scaling_law.collect_metrics \
   --eval-metrics-dir "${NANOCHAT_BASE_DIR}/eval_metrics" \
   --out-dir "${NANOCHAT_BASE_DIR}/merged_metrics" || true
 exit "$rc"
-

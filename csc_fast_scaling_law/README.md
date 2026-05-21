@@ -18,6 +18,10 @@ These files are the artifact boundary consumed by the scaling-law experiment
 repo. Raw logs and checkpoints should stay on Roihu or in ignored output
 folders.
 
+The scripts prepend `csc_fast_scaling_law/wandb_stub` to `PYTHONPATH` because the
+Roihu PyTorch container can contain an unrelated broken `wandb`/protobuf
+combination. This keeps `--run=dummy` jobs independent of system `wandb`.
+
 ## Smoke Flow
 
 ```bash
@@ -31,4 +35,3 @@ sbatch --array=1-2%1 csc_fast_scaling_law/run_eval_array.sbatch
 
 Use `csc_fast_scaling_law/monitor_roihu.sh` from a local machine to inspect
 queue state, recent accounting, and the latest merged metrics.
-
