@@ -207,6 +207,9 @@ def test_slurm_wrappers_use_local_wandb_stub() -> None:
     root = Path(__file__).resolve().parents[1]
     train_script = (root / "csc_fast_scaling_law" / "run_train_array.sbatch").read_text(encoding="utf-8")
     eval_script = (root / "csc_fast_scaling_law" / "run_eval_array.sbatch").read_text(encoding="utf-8")
+    stub = root / "csc_fast_scaling_law" / "wandb_stub" / "wandb" / "__init__.py"
 
     assert "csc_fast_scaling_law/wandb_stub" in train_script
     assert "csc_fast_scaling_law/wandb_stub" in eval_script
+    assert stub.exists()
+    assert "def init" in stub.read_text(encoding="utf-8")
