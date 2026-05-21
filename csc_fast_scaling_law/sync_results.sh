@@ -14,7 +14,9 @@ rsync -av \
   "${LOCAL_OUT}/merged_metrics/"
 rsync -av \
   "${REMOTE}:${CACHE_ROOT}/${CAMPAIGN_ID}/train_metrics/stage_metrics.jsonl" \
+  "${LOCAL_OUT}/train_stage_metrics.jsonl" || true
+rsync -av \
   "${REMOTE}:${CACHE_ROOT}/${CAMPAIGN_ID}/eval_metrics/stage_metrics.jsonl" \
-  "${LOCAL_OUT}/" || true
+  "${LOCAL_OUT}/eval_stage_metrics.jsonl" || true
 
 echo "Synced ${CAMPAIGN_ID} to ${LOCAL_OUT}"

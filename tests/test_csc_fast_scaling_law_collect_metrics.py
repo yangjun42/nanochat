@@ -226,3 +226,11 @@ def test_slurm_wrappers_use_local_wandb_stub() -> None:
     assert "csc_fast_scaling_law/wandb_stub" in eval_script
     assert stub.exists()
     assert "def init" in stub.read_text(encoding="utf-8")
+
+
+def test_sync_results_keeps_train_and_eval_stage_metrics_separate() -> None:
+    root = Path(__file__).resolve().parents[1]
+    sync_script = (root / "csc_fast_scaling_law" / "sync_results.sh").read_text(encoding="utf-8")
+
+    assert "train_stage_metrics.jsonl" in sync_script
+    assert "eval_stage_metrics.jsonl" in sync_script
