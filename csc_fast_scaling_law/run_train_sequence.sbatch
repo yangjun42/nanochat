@@ -19,6 +19,10 @@ PROJECT="${CSC_PROJECT:-project_2017828}"
 USER_NAME="${CSC_USER:-${USER:-yangjun1}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SUBMIT_REPO_DIR="${SLURM_SUBMIT_DIR:-}"
+if [ -n "$SUBMIT_REPO_DIR" ] && [ -d "${SUBMIT_REPO_DIR}/csc_fast_scaling_law" ]; then
+  DEFAULT_REPO_DIR="$SUBMIT_REPO_DIR"
+fi
 REPO_DIR="${NANOCHAT_CHECKOUT:-${DEFAULT_REPO_DIR}}"
 PLAN_CSV="${PLAN_CSV:-${REPO_DIR}/csc_fast_scaling_law/inputs/smoke_plan.csv}"
 ROW_START="${ROW_START:-1}"

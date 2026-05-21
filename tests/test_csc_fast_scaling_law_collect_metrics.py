@@ -257,6 +257,8 @@ def test_slurm_wrappers_default_to_their_own_checkout() -> None:
     for script in scripts:
         text = script.read_text(encoding="utf-8")
         assert 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' in text
+        assert 'SUBMIT_REPO_DIR="${SLURM_SUBMIT_DIR:-}"' in text
+        assert '[ -d "${SUBMIT_REPO_DIR}/csc_fast_scaling_law" ]' in text
         assert 'DEFAULT_REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"' in text
         assert 'REPO_DIR="${NANOCHAT_CHECKOUT:-${DEFAULT_REPO_DIR}}"' in text
 
