@@ -83,14 +83,31 @@ def parse_log(path: Path | None) -> dict[str, float]:
         "N_total": r"\bN_total\b\s*[:=]\s*([0-9.eE+-]+)",
         "N_scaling": r"\bN_scaling\b\s*[:=]\s*([0-9.eE+-]+)",
         "flops_per_token_est": r"\bflops_per_token_est\b\s*[:=]\s*([0-9.eE+-]+)",
+        "flops_per_token_est_report": r"Estimated FLOPs per token:\s*([0-9.eE+-]+)",
         "train_bpb_final": r"train bpb:\s*([0-9.eE+-]+)",
+        "train_bpb_minimum": r"Minimum validation bpb:\s*([0-9.eE+-]+)",
         "val_bpb_final": r"val bpb:\s*([0-9.eE+-]+)",
     }
     out: dict[str, float] = {}
     for key, pattern in patterns.items():
         matches = re.findall(pattern, text)
         if matches:
-            out[key] = float(matches[-1])
+            canonical_key = {
+                "flops_per_token_est_report": "flops_per_token_est",
+                "train_bpb_minimum": "train_bpb_final",
+            }.get(key, key)
+            out[canonical_key] = float(matches[-1].replace(",", ""))
+
+    parameter_counts: dict[str, float] = {}
+    for key, raw in re.findall(r"^([A-Za-z0-9_]+)\s*:\s*([0-9][0-9,]*)\s*$", text, flags=re.MULTILINE):
+        parameter_counts[key] = float(raw.replace(",", ""))
+    if "N_total" not in out and "total" in parameter_counts:
+        out["N_total"] = parameter_counts["total"]
+    if "N_scaling" not in out:
+        if "transformer_matrices" in parameter_counts and "lm_head" in parameter_counts:
+            out["N_scaling"] = parameter_counts["transformer_matrices"] + parameter_counts["lm_head"]
+        elif "total" in parameter_counts:
+            out["N_scaling"] = parameter_counts["total"]
     return out
 
 
