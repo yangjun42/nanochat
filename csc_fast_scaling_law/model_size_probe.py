@@ -5,6 +5,7 @@ import argparse
 import csv
 import itertools
 import math
+import numbers
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -37,6 +38,8 @@ TRIPLET_FIELDNAMES = [
     "control_changes",
     "spacing_error",
     "geometric_rel_error",
+    "is_exact_geometric",
+    "geometric_cross_product_residual",
     "n_ratio_01",
     "n_ratio_12",
     "n_total_ratio",
@@ -71,6 +74,35 @@ def _rounded_model_dim(*, depth: int, aspect_ratio: int, head_dim: int) -> int:
 
 def _compact_values(values: Iterable[Any]) -> str:
     return ",".join(f"{float(value):.12g}" if isinstance(value, float) else str(value) for value in values)
+
+
+def _as_exact_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        as_float = float(value)
+        if math.isfinite(as_float) and as_float.is_integer():
+            return int(as_float)
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _geometric_cross_product_residual(raw_values: list[Any], values: list[float]) -> int | float:
+    exact_values = [_as_exact_int(value) for value in raw_values]
+    if all(value is not None for value in exact_values):
+        n0, n1, n2 = [int(value) for value in exact_values]
+        return n1 * n1 - n0 * n2
+    return values[1] * values[1] - values[0] * values[2]
 
 
 def make_model_size_row(
@@ -204,9 +236,10 @@ def rank_geometric_triplets(
     else:
         combinations_iter = itertools.combinations(candidates, 3)
 
-    scored: list[tuple[tuple[int, float, float], list[dict[str, Any]], list[float], list[float]]] = []
+    scored: list[tuple[tuple[int, float, float], list[dict[str, Any]], list[float], list[float], int | float]] = []
     for combo in combinations_iter:
         ordered = sorted(combo, key=lambda row: float(row[value_key]))
+        raw_values = [row[value_key] for row in ordered]
         values = [float(row[value_key]) for row in ordered]
         if values[1] / values[0] < min_step_ratio or values[2] / values[1] < min_step_ratio:
             continue
@@ -214,17 +247,21 @@ def rank_geometric_triplets(
             continue
         log_ratios = [math.log(values[1] / values[0]), math.log(values[2] / values[1])]
         spacing_error = abs(log_ratios[1] - log_ratios[0])
+        cross_product_residual = _geometric_cross_product_residual(raw_values, values)
         control_changes = len({tuple(row.get(key) for key in control_keys) for row in ordered}) - 1
         if max_control_changes is not None and control_changes > max_control_changes:
             continue
         span = math.log(values[2] / values[0])
         score = (control_changes, spacing_error, -span)
-        scored.append((score, ordered, values, [values[1] / values[0], values[2] / values[1]]))
+        scored.append((score, ordered, values, [values[1] / values[0], values[2] / values[1]], cross_product_residual))
     if not scored:
         raise ValueError("no non-degenerate size triplet satisfies the minimum ratio constraints")
 
     ranked: list[dict[str, Any]] = []
-    for rank, (score, ordered, values, ratios) in enumerate(sorted(scored, key=lambda item: item[0])[:top_k], start=1):
+    for rank, (score, ordered, values, ratios, cross_product_residual) in enumerate(
+        sorted(scored, key=lambda item: item[0])[:top_k],
+        start=1,
+    ):
         ratio_denom = max(abs(ratios[0]), abs(ratios[1]), 1e-300)
         ranked.append(
             {
@@ -232,6 +269,8 @@ def rank_geometric_triplets(
                 "control_changes": score[0],
                 "spacing_error": score[1],
                 "geometric_rel_error": abs(ratios[1] - ratios[0]) / ratio_denom,
+                "is_exact_geometric": cross_product_residual == 0,
+                "geometric_cross_product_residual": cross_product_residual,
                 "n_ratio_01": ratios[0],
                 "n_ratio_12": ratios[1],
                 "n_total_ratio": values[2] / values[0],

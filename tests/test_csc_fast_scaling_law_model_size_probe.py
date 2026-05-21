@@ -81,6 +81,32 @@ def test_rank_geometric_triplets_returns_explainable_top_candidates() -> None:
     assert ranked[1]["rank"] == 2
 
 
+def test_rank_geometric_triplets_reports_exact_integer_geometry() -> None:
+    rows = [
+        {"depth": 2, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 9_961_496},
+        {"depth": 4, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 19_660_872},
+        {"depth": 7, "aspect_ratio": 72, "head_dim": 128, "N_scaling": 38_797_504},
+    ]
+
+    ranked = rank_geometric_triplets(rows, top_k=1)
+
+    assert ranked[0]["is_exact_geometric"] is False
+    assert ranked[0]["geometric_cross_product_residual"] == 68_706_894_400
+
+
+def test_rank_geometric_triplets_marks_exact_integer_triples() -> None:
+    rows = [
+        {"depth": 1, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 100},
+        {"depth": 2, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 200},
+        {"depth": 4, "aspect_ratio": 64, "head_dim": 128, "N_scaling": 400},
+    ]
+
+    ranked = rank_geometric_triplets(rows, top_k=1)
+
+    assert ranked[0]["is_exact_geometric"] is True
+    assert ranked[0]["geometric_cross_product_residual"] == 0
+
+
 def test_rank_geometric_triplets_can_restrict_to_fixed_controls() -> None:
     rows = [
         {"depth": 2, "aspect_ratio": 48, "head_dim": 128, "N_scaling": 100.0},

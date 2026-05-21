@@ -41,4 +41,5 @@ Tracked example plans:
 - `roihu_reference_sizeprobe72_3x3_seed0.csv`: next preflight-selected 3x3
   candidate using depths `2,4,7`, `aspect_ratio=72`, and `head_dim=128`.
   The fixed-control model-size scan estimates a much smaller geometric spacing
-  error before training.
+  error before training, but its `is_exact_geometric` probe flag is still
+  `False`.

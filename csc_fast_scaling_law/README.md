@@ -41,7 +41,10 @@ The printed triplet is a non-degenerate, approximately geometric `N_scaling`
 proposal under the chosen size bound. Add its `depth`, `aspect_ratio`, and
 `head_dim` columns to the run-plan CSV; `run_train_array.sbatch` passes these
 controls through to `scripts.base_train`. The measured training log still
-remains authoritative for `N_scaling`.
+remains authoritative for `N_scaling`. The triplet CSV includes
+`is_exact_geometric` and `geometric_cross_product_residual`; strict closed-form
+`5pEst` candidates require the former to be `True`, not merely a small spacing
+error.
 
 A wider fixed-control scan found the next candidate plan
 `inputs/roihu_reference_sizeprobe72_3x3_seed0.csv`:
@@ -50,7 +53,9 @@ A wider fixed-control scan found the next candidate plan
 - `aspect_ratio=72`;
 - `head_dim=128`;
 - preflight `N_scaling` values `9,961,496`, `19,660,872`, `38,797,504`;
-- preflight geometric relative error about `0.000178`.
+- preflight geometric relative error about `0.000178`;
+- `is_exact_geometric=False` with integer cross-product residual
+  `68,706,894,400`.
 
 ## Smoke Flow
 
