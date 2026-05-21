@@ -27,6 +27,9 @@ def test_collect_campaign_writes_fit_ready_cells(tmp_path: Path) -> None:
                 "window_pattern",
                 "model_tag",
                 "split",
+                "n_index",
+                "d_index",
+                "planned_family",
             ],
         )
         writer.writeheader()
@@ -46,6 +49,9 @@ def test_collect_campaign_writes_fit_ready_cells(tmp_path: Path) -> None:
                 "window_pattern": "L",
                 "model_tag": "fsl-smoke",
                 "split": "smoke",
+                "n_index": "0",
+                "d_index": "1",
+                "planned_family": "roihu_reference_3x3",
             }
         )
 
@@ -109,6 +115,13 @@ def test_collect_campaign_writes_fit_ready_cells(tmp_path: Path) -> None:
     assert rows[0]["val_bpb_final"] == "1.11"
     assert rows[0]["C_6ND"] == str(6.0 * 45678.0 * 33554432.0)
     assert rows[0]["gpu_seconds_train"] == "48.0"
+    assert rows[0]["n_index"] == "0"
+    assert rows[0]["d_index"] == "1"
+    assert rows[0]["planned_family"] == "roihu_reference_3x3"
+
+    merged_rows = list(csv.DictReader(outputs["metrics_csv"].open(newline="", encoding="utf-8")))
+    assert "n_index" in merged_rows[0]
+    assert "planned_family" in merged_rows[0]
 
 
 def test_collect_campaign_parses_current_base_train_parameter_table(tmp_path: Path) -> None:

@@ -61,6 +61,11 @@ def read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def read_csv_fieldnames(path: Path) -> list[str]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f).fieldnames or [])
+
+
 def read_stage_metrics(path: Path) -> dict[str, dict[str, Any]]:
     jsonl = path / "stage_metrics.jsonl"
     rows: dict[str, dict[str, Any]] = {}
@@ -189,6 +194,8 @@ def collect_campaign(
     out_dir: Path,
 ) -> dict[str, Path]:
     rows = merge_rows(plan_csv=plan_csv, train_metrics_dir=train_metrics_dir, eval_metrics_dir=eval_metrics_dir)
+    extra_fields = [field for field in read_csv_fieldnames(plan_csv) if field not in METRIC_FIELDS]
+    output_fields = [*METRIC_FIELDS, *extra_fields]
     fit_ready = [
         row
         for row in rows
@@ -200,9 +207,9 @@ def collect_campaign(
     metrics_csv = out_dir / "metrics.csv"
     metrics_jsonl = out_dir / "metrics.jsonl"
     fit_ready_cells_csv = out_dir / "fit_ready_cells.csv"
-    write_csv(metrics_csv, rows, METRIC_FIELDS)
+    write_csv(metrics_csv, rows, output_fields)
     write_jsonl(metrics_jsonl, rows)
-    write_csv(fit_ready_cells_csv, fit_ready, METRIC_FIELDS)
+    write_csv(fit_ready_cells_csv, fit_ready, output_fields)
     return {
         "metrics_csv": metrics_csv,
         "metrics_jsonl": metrics_jsonl,

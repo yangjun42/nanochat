@@ -13,5 +13,17 @@ Required columns:
 - `model_tag`: checkpoint tag.
 
 Optional columns are preserved in merged metrics when present, but they are not
-required by the artifact contract.
+required by the artifact contract. The reference-grid plan uses:
 
+- `n_index`, `d_index`: intended grid coordinates before measured `N_scaling`
+  is known.
+- `planned_family`: descriptive plan family, for example
+  `roihu_reference_depth_token_grid`.
+- `planned_model_depth`, `planned_data_tokens`, `planned_total_batch_size`:
+  planned controls used to create the row. The measured `N_scaling` and
+  `D_actual` in merged metrics remain the authoritative fitting coordinates.
+
+Tracked example plans:
+
+- `smoke_plan.csv`: two-row train/eval harness smoke check.
+- `roihu_reference_3x3_seed0.csv`: first 3x3 reference grid after smoke.
