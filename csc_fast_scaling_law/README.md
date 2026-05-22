@@ -117,6 +117,15 @@ seeds. This confirms the source observed-grid depth-4 decision under the
 held-out BPB/final-verification referee, but it does not turn the gate-blocked
 strict real Delta-Ensemble path into a proven real-data algorithm claim.
 
+The next tracked source-surface run is
+`inputs/roihu_reference_sizeprobe72_source_replicate_seed11_12.csv`. It keeps the
+fixed-control sizeprobe72 3x3 grid (`aspect_ratio=72`, `head_dim=128`) and
+repeats all nine source cells at seeds `11` and `12` with `split=reference`.
+The rows carry `replicate_source_*` metadata rather than
+`source_campaign_id`/`verification_role`, so the analysis repo treats them as a
+new source surface for cell-mean strict-gate and Delta-Ensemble eligibility
+checks, not as final-verification referee rows.
+
 ## Smoke Flow
 
 ```bash

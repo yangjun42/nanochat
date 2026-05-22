@@ -63,3 +63,9 @@ Tracked example plans:
   next seed-extension final-verification block for the same depth-4/depth-7
   contenders. It keeps the same `d_index=2`, `aspect_ratio=72`, `head_dim=128`,
   and 256-iteration controls, and adds paired seeds `6` through `10`.
+- `roihu_reference_sizeprobe72_source_replicate_seed11_12.csv`:
+  full source-surface replication plan for the sizeprobe72 3x3 grid. It keeps
+  `split=reference`, repeats all nine `n_index,d_index` cells at seeds `11` and
+  `12`, and uses `replicate_source_*` metadata instead of
+  `source_campaign_id`/`verification_role` so these rows are not consumed as
+  final-verification referee rows.
