@@ -105,6 +105,12 @@ across all final-verification seeds 1-5, depth 7 is the current mean leader
 held-out-BPB referee active before treating the allocation as fully settled,
 because the depth-7 seed variance remains visibly larger.
 
+The next tracked execution block is
+`inputs/roihu_reference_sizeprobe72_depth47_finalverify_seed6_10.csv`. It keeps
+the same depth-4/depth-7 same-data contenders and adds paired final-verification
+seeds `6` through `10` without changing the source campaign or using a fitted
+surface as oracle.
+
 ## Smoke Flow
 
 ```bash
