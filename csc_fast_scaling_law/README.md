@@ -139,6 +139,10 @@ sbatch --array=1-2%1 csc_fast_scaling_law/run_eval_array.sbatch
 
 Use `csc_fast_scaling_law/monitor_roihu.sh` from a local machine to inspect
 queue state, recent accounting, and the latest merged metrics.
+The monitor runs a local CSC SSH user-certificate preflight before any remote
+SSH command. Override the certificate path with `ROIHU_SSH_CERT` when needed;
+an expired certificate fails locally with the expiry timestamp instead of
+falling through to a remote `Permission denied (publickey)` error.
 
 ## Sequential Fallback
 

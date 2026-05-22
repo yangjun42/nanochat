@@ -269,3 +269,11 @@ def test_sync_results_keeps_train_and_eval_stage_metrics_separate() -> None:
 
     assert "train_stage_metrics.jsonl" in sync_script
     assert "eval_stage_metrics.jsonl" in sync_script
+
+
+def test_monitor_roihu_runs_local_ssh_preflight_before_remote_commands() -> None:
+    root = Path(__file__).resolve().parents[1]
+    monitor_script = (root / "csc_fast_scaling_law" / "monitor_roihu.sh").read_text(encoding="utf-8")
+
+    assert "csc_fast_scaling_law.ssh_preflight" in monitor_script
+    assert "ROIHU_SSH_CERT" in monitor_script
