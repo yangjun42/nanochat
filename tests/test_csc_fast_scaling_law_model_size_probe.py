@@ -4,6 +4,7 @@ import pytest
 
 from csc_fast_scaling_law.model_size_probe import (
     make_formula_model_size_row,
+    make_geometric_model_dim_rows,
     make_model_size_row,
     make_model_size_table,
     rank_geometric_triplets,
@@ -52,6 +53,63 @@ def test_formula_model_size_row_matches_meta_model_counts() -> None:
     assert formula_row == meta_row
 
 
+def test_explicit_model_dim_formula_counts_match_meta_model_counts() -> None:
+    meta_row = make_model_size_row(
+        depth=4,
+        aspect_ratio=72,
+        head_dim=128,
+        model_dim=768,
+        max_seq_len=2048,
+        vocab_size=32768,
+        window_pattern="L",
+    )
+
+    formula_row = make_formula_model_size_row(
+        depth=4,
+        aspect_ratio=72,
+        head_dim=128,
+        model_dim=768,
+        max_seq_len=2048,
+        vocab_size=32768,
+        window_pattern="L",
+    )
+
+    assert formula_row == meta_row
+    assert meta_row["model_dim"] == 768
+    assert meta_row["n_embd"] == 768
+    assert meta_row["n_head"] == 6
+    assert meta_row["sizing_source"] == "model_dim"
+
+
+def test_geometric_model_dim_solver_hits_monotone_near_geometric_targets() -> None:
+    base = make_formula_model_size_row(
+        depth=4,
+        aspect_ratio=72,
+        head_dim=128,
+        model_dim=512,
+    )
+
+    rows = make_geometric_model_dim_rows(
+        depth=4,
+        head_dim=128,
+        target_n_scaling=[base["N_scaling"], 2 * base["N_scaling"], 4 * base["N_scaling"]],
+        aspect_ratio=72,
+        max_seq_len=2048,
+        vocab_size=32768,
+        window_pattern="L",
+    )
+
+    assert [row["n_index"] for row in rows] == [0, 1, 2]
+    assert [row["target_n_scaling"] for row in rows] == [
+        base["N_scaling"],
+        2 * base["N_scaling"],
+        4 * base["N_scaling"],
+    ]
+    assert [row["model_dim"] for row in rows] == sorted(row["model_dim"] for row in rows)
+    assert {row["sizing_source"] for row in rows} == {"model_dim"}
+    assert max(float(row["target_n_scaling_rel_error"]) for row in rows) < 0.10
+
+
 def test_model_size_table_can_use_formula_counts() -> None:
     rows = make_model_size_table(
         depths=[2, 4, 7],
@@ -73,6 +131,20 @@ def test_model_size_table_can_scan_multiple_head_dims() -> None:
 
     assert [row["head_dim"] for row in rows] == [64, 128]
     assert [row["n_embd"] for row in rows] == [64, 128]
+
+
+def test_model_size_table_can_scan_explicit_model_dims() -> None:
+    rows = make_model_size_table(
+        depths=[4],
+        aspect_ratios=[72],
+        head_dim=128,
+        model_dims=[256, 512, 768],
+        use_formula_counts=True,
+    )
+
+    assert [row["model_dim"] for row in rows] == [256, 512, 768]
+    assert [row["n_head"] for row in rows] == [2, 4, 6]
+    assert {row["sizing_source"] for row in rows} == {"model_dim"}
 
 
 def test_select_geometric_triplet_prefers_even_measured_n_scaling_ratios() -> None:
@@ -238,5 +310,7 @@ def test_run_train_array_accepts_architecture_columns_from_plan() -> None:
 
     assert "ASPECT_RATIO=\"${ASPECT_RATIO:-64}\"" in script
     assert "HEAD_DIM=\"${HEAD_DIM:-128}\"" in script
+    assert "MODEL_DIM=\"${MODEL_DIM:-}\"" in script
     assert "--aspect-ratio=\"$ASPECT_RATIO\"" in script
     assert "--head-dim=\"$HEAD_DIM\"" in script
+    assert "--model-dim" in script

@@ -34,6 +34,7 @@ from nanochat.loss_eval import evaluate_bpb
 from nanochat.engine import Engine
 from nanochat.flash_attention import HAS_FA3
 from scripts.base_eval import evaluate_core
+from csc_fast_scaling_law.model_shape import resolve_model_shape
 print_banner()
 
 # -----------------------------------------------------------------------------
@@ -51,6 +52,7 @@ parser.add_argument("--fp8-recipe", type=str, default="tensorwise", choices=["ro
 parser.add_argument("--depth", type=int, default=20, help="depth of the Transformer model")
 parser.add_argument("--aspect-ratio", type=int, default=64, help="model_dim = depth * aspect_ratio")
 parser.add_argument("--head-dim", type=int, default=128, help="target head dimension for attention")
+parser.add_argument("--model-dim", type=int, default=-1, help="explicit model dimension override (-1 = depth * aspect_ratio rounded to head_dim)")
 parser.add_argument("--max-seq-len", type=int, default=2048, help="max context length")
 parser.add_argument("--window-pattern", type=str, default="SSSL", help="sliding window pattern tiled across layers: L=full, S=half context (e.g. 'SSL')")
 # Training horizon (only one used, in order of precedence)
@@ -132,16 +134,17 @@ print0(f"Vocab size: {vocab_size:,}")
 # -----------------------------------------------------------------------------
 # Initialize the Model
 
-def build_model_meta(depth):
+def build_model_meta(depth, model_dim_override=-1):
     """Build a model on meta device for a given depth (shapes/dtypes only, no data)."""
-    # Model dim is nudged up to nearest multiple of head_dim for clean division
-    # (FA3 requires head_dim divisible by 8, and this guarantees head_dim == args.head_dim exactly)
-    base_dim = depth * args.aspect_ratio
-    model_dim = ((base_dim + args.head_dim - 1) // args.head_dim) * args.head_dim
-    num_heads = model_dim // args.head_dim
+    shape = resolve_model_shape(
+        depth=depth,
+        aspect_ratio=args.aspect_ratio,
+        head_dim=args.head_dim,
+        model_dim=model_dim_override,
+    )
     config = GPTConfig(
         sequence_len=args.max_seq_len, vocab_size=vocab_size,
-        n_layer=depth, n_head=num_heads, n_kv_head=num_heads, n_embd=model_dim,
+        n_layer=depth, n_head=shape.n_head, n_kv_head=shape.n_head, n_embd=shape.model_dim,
         window_pattern=args.window_pattern,
     )
     with torch.device("meta"):
@@ -149,10 +152,22 @@ def build_model_meta(depth):
     return model_meta
 
 # Build the model, move to device, init the weights
-model = build_model_meta(args.depth) # 1) Build on meta device (only shapes/dtypes, no data)
+model_shape = resolve_model_shape(
+    depth=args.depth,
+    aspect_ratio=args.aspect_ratio,
+    head_dim=args.head_dim,
+    model_dim=args.model_dim,
+)
+model = build_model_meta(args.depth, model_dim_override=args.model_dim) # 1) Build on meta device (only shapes/dtypes, no data)
 model_config = model.config
 model_config_kwargs = asdict(model_config)
 print0(f"Model config:\n{json.dumps(model_config_kwargs, indent=2)}")
+print0(
+    "Model sizing: "
+    f"source={model_shape.sizing_source} depth={model_shape.depth} "
+    f"aspect_ratio={model_shape.aspect_ratio} head_dim={model_shape.head_dim} "
+    f"model_dim={model_shape.model_dim} n_head={model_shape.n_head}"
+)
 model.to_empty(device=device) # 2) All tensors get storage on target device but with uninitialized (garbage) data
 model.init_weights() # 3) All tensors get initialized
 
@@ -282,7 +297,7 @@ print0(f"Number of scaling parameters: {num_scaling_params:,}")
 print0(f"Target training tokens ({target_tokens_source}): {target_tokens:,}")
 
 # Our reference model is d12, this is where a lot of hyperparameters are tuned and then transfered to higher depths (muP style)
-d12_ref = build_model_meta(12) # creates the model on meta device
+d12_ref = build_model_meta(12, model_dim_override=-1) # creates the model on meta device
 D_REF = args.target_param_data_ratio * get_scaling_params(d12_ref) # compute-optimal d12 training horizon in tokens (measured empirically)
 B_REF = 2**19 # optimal batch size at d12 ~= 524,288 tokens (measured empirically)
 

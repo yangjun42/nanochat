@@ -11,6 +11,7 @@ from typing import Any, Iterable
 
 import torch
 
+from csc_fast_scaling_law.model_shape import resolve_model_shape
 from nanochat.gpt import GPT, GPTConfig
 
 
@@ -21,6 +22,8 @@ SIZE_FIELDNAMES = [
     "max_seq_len",
     "vocab_size",
     "window_pattern",
+    "model_dim",
+    "sizing_source",
     "n_embd",
     "n_head",
     "N_total",
@@ -31,6 +34,10 @@ SIZE_FIELDNAMES = [
     "lm_head",
     "transformer_matrices",
     "scalars",
+    "target_n_scaling",
+    "target_n_scaling_abs_error",
+    "target_n_scaling_rel_error",
+    "n_index",
 ]
 
 TRIPLET_FIELDNAMES = [
@@ -65,11 +72,6 @@ def _parse_int_list(raw: str) -> list[int]:
         else:
             values.append(int(item))
     return sorted(set(values))
-
-
-def _rounded_model_dim(*, depth: int, aspect_ratio: int, head_dim: int) -> int:
-    base_dim = depth * aspect_ratio
-    return ((base_dim + head_dim - 1) // head_dim) * head_dim
 
 
 def _compact_values(values: Iterable[Any]) -> str:
@@ -138,6 +140,7 @@ def make_formula_model_size_row(
     depth: int,
     aspect_ratio: int = 64,
     head_dim: int = 128,
+    model_dim: int | None = None,
     max_seq_len: int = 2048,
     vocab_size: int = 32768,
     window_pattern: str = "L",
@@ -147,8 +150,9 @@ def make_formula_model_size_row(
     if min(depth, aspect_ratio, head_dim, max_seq_len, vocab_size) <= 0:
         raise ValueError("depth, aspect_ratio, head_dim, max_seq_len, and vocab_size must be positive")
 
-    model_dim = _rounded_model_dim(depth=depth, aspect_ratio=aspect_ratio, head_dim=head_dim)
-    n_head = model_dim // head_dim
+    shape = resolve_model_shape(depth=depth, aspect_ratio=aspect_ratio, head_dim=head_dim, model_dim=model_dim)
+    model_dim = shape.model_dim
+    n_head = shape.n_head
     padded_vocab_size = _padded_vocab_size(vocab_size)
     value_embedding_layers = _value_embedding_layers(depth)
     wte = padded_vocab_size * model_dim
@@ -171,6 +175,8 @@ def make_formula_model_size_row(
         "max_seq_len": max_seq_len,
         "vocab_size": vocab_size,
         "window_pattern": window_pattern,
+        "model_dim": model_dim,
+        "sizing_source": shape.sizing_source,
         "n_embd": model_dim,
         "n_head": n_head,
         "N_total": total,
@@ -189,6 +195,7 @@ def make_model_size_row(
     depth: int,
     aspect_ratio: int = 64,
     head_dim: int = 128,
+    model_dim: int | None = None,
     max_seq_len: int = 2048,
     vocab_size: int = 32768,
     window_pattern: str = "L",
@@ -198,8 +205,9 @@ def make_model_size_row(
     if min(depth, aspect_ratio, head_dim, max_seq_len, vocab_size) <= 0:
         raise ValueError("depth, aspect_ratio, head_dim, max_seq_len, and vocab_size must be positive")
 
-    model_dim = _rounded_model_dim(depth=depth, aspect_ratio=aspect_ratio, head_dim=head_dim)
-    n_head = model_dim // head_dim
+    shape = resolve_model_shape(depth=depth, aspect_ratio=aspect_ratio, head_dim=head_dim, model_dim=model_dim)
+    model_dim = shape.model_dim
+    n_head = shape.n_head
     config = GPTConfig(
         sequence_len=max_seq_len,
         vocab_size=vocab_size,
@@ -221,6 +229,8 @@ def make_model_size_row(
         "max_seq_len": max_seq_len,
         "vocab_size": vocab_size,
         "window_pattern": window_pattern,
+        "model_dim": model_dim,
+        "sizing_source": shape.sizing_source,
         "n_embd": model_dim,
         "n_head": n_head,
         "N_total": counts["total"],
@@ -240,6 +250,7 @@ def make_model_size_table(
     aspect_ratios: Iterable[int],
     head_dim: int = 128,
     head_dims: Iterable[int] | None = None,
+    model_dims: Iterable[int] | None = None,
     max_seq_len: int = 2048,
     vocab_size: int = 32768,
     window_pattern: str = "L",
@@ -248,16 +259,107 @@ def make_model_size_table(
     rows = []
     row_builder = make_formula_model_size_row if use_formula_counts else make_model_size_row
     scanned_head_dims = [head_dim] if head_dims is None else sorted(head_dims)
-    for head_dim_value, aspect_ratio, depth in itertools.product(scanned_head_dims, sorted(aspect_ratios), sorted(depths)):
+    scanned_model_dims: list[int | None] = [None] if model_dims is None else sorted(int(value) for value in model_dims)
+    for head_dim_value, aspect_ratio, depth, model_dim in itertools.product(
+        scanned_head_dims,
+        sorted(aspect_ratios),
+        sorted(depths),
+        scanned_model_dims,
+    ):
         rows.append(
             row_builder(
                 depth=depth,
                 aspect_ratio=aspect_ratio,
                 head_dim=head_dim_value,
+                model_dim=model_dim,
                 max_seq_len=max_seq_len,
                 vocab_size=vocab_size,
                 window_pattern=window_pattern,
             )
+        )
+    return rows
+
+
+def _nearest_model_dim_for_target_n_scaling(
+    *,
+    target_n_scaling: float,
+    depth: int,
+    aspect_ratio: int,
+    head_dim: int,
+    max_seq_len: int,
+    vocab_size: int,
+    window_pattern: str,
+    use_formula_counts: bool,
+) -> dict[str, int | float | str]:
+    if target_n_scaling <= 0:
+        raise ValueError("target_n_scaling values must be positive")
+
+    padded_vocab_size = _padded_vocab_size(vocab_size)
+    quadratic_a = 12.0 * depth
+    quadratic_b = float(padded_vocab_size)
+    root = (-quadratic_b + math.sqrt(quadratic_b * quadratic_b + 4.0 * quadratic_a * target_n_scaling)) / (
+        2.0 * quadratic_a
+    )
+    lower = max(head_dim, int(math.floor(root / head_dim)) * head_dim)
+    upper = max(head_dim, int(math.ceil(root / head_dim)) * head_dim)
+    candidates = sorted({lower, upper})
+    row_builder = make_formula_model_size_row if use_formula_counts else make_model_size_row
+    rows = [
+        row_builder(
+            depth=depth,
+            aspect_ratio=aspect_ratio,
+            head_dim=head_dim,
+            model_dim=candidate,
+            max_seq_len=max_seq_len,
+            vocab_size=vocab_size,
+            window_pattern=window_pattern,
+        )
+        for candidate in candidates
+    ]
+    return min(rows, key=lambda row: (abs(float(row["N_scaling"]) - target_n_scaling), int(row["model_dim"])))
+
+
+def make_geometric_model_dim_rows(
+    *,
+    depth: int,
+    target_n_scaling: Iterable[int | float],
+    aspect_ratio: int = 64,
+    head_dim: int = 128,
+    max_seq_len: int = 2048,
+    vocab_size: int = 32768,
+    window_pattern: str = "L",
+    use_formula_counts: bool = True,
+) -> list[dict[str, int | float | str]]:
+    """Return fixed-depth rows whose explicit model_dim is closest to target N values."""
+
+    targets = [float(value) for value in target_n_scaling]
+    if not targets:
+        raise ValueError("target_n_scaling must not be empty")
+    if any(value <= 0 or not math.isfinite(value) for value in targets):
+        raise ValueError("target_n_scaling values must be finite and positive")
+
+    rows: list[dict[str, int | float | str]] = []
+    for n_index, target in enumerate(targets):
+        row = _nearest_model_dim_for_target_n_scaling(
+            target_n_scaling=target,
+            depth=depth,
+            aspect_ratio=aspect_ratio,
+            head_dim=head_dim,
+            max_seq_len=max_seq_len,
+            vocab_size=vocab_size,
+            window_pattern=window_pattern,
+            use_formula_counts=use_formula_counts,
+        )
+        actual = float(row["N_scaling"])
+        target_value = int(target) if target.is_integer() else target
+        rows.append(
+            {
+                **row,
+                "n_index": n_index,
+                "target_n_scaling": target_value,
+                "target_n_scaling_abs_error": abs(actual - target),
+                "target_n_scaling_rel_error": abs(actual - target) / target,
+            }
         )
     return rows
 
@@ -438,6 +540,12 @@ def main() -> None:
     parser.add_argument("--aspect-ratios", default="64", help="Comma list and/or inclusive ranges.")
     parser.add_argument("--head-dim", type=int, default=128)
     parser.add_argument("--head-dims", default=None, help="Optional comma list and/or inclusive ranges of head dims.")
+    parser.add_argument("--model-dims", default=None, help="Optional comma list and/or inclusive ranges of explicit model dims.")
+    parser.add_argument(
+        "--target-n-scaling",
+        default=None,
+        help="Optional comma list of target N_scaling values; solves explicit model_dim rows for a single depth.",
+    )
     parser.add_argument("--max-seq-len", type=int, default=2048)
     parser.add_argument("--vocab-size", type=int, default=32768)
     parser.add_argument("--window-pattern", default="L")
@@ -453,16 +561,35 @@ def main() -> None:
     parser.add_argument("--exact-only", action="store_true", help="Only rank exactly geometric integer triplets.")
     args = parser.parse_args()
 
-    rows = make_model_size_table(
-        depths=_parse_int_list(args.depths),
-        aspect_ratios=_parse_int_list(args.aspect_ratios),
-        head_dim=args.head_dim,
-        head_dims=_parse_int_list(args.head_dims) if args.head_dims else None,
-        max_seq_len=args.max_seq_len,
-        vocab_size=args.vocab_size,
-        window_pattern=args.window_pattern,
-        use_formula_counts=args.formula_counts,
-    )
+    depth_values = _parse_int_list(args.depths)
+    aspect_ratio_values = _parse_int_list(args.aspect_ratios)
+    if args.target_n_scaling:
+        if len(depth_values) != 1:
+            raise ValueError("--target-n-scaling requires exactly one depth")
+        if len(aspect_ratio_values) != 1:
+            raise ValueError("--target-n-scaling requires exactly one aspect ratio")
+        rows = make_geometric_model_dim_rows(
+            depth=depth_values[0],
+            target_n_scaling=_parse_int_list(args.target_n_scaling),
+            aspect_ratio=aspect_ratio_values[0],
+            head_dim=args.head_dim,
+            max_seq_len=args.max_seq_len,
+            vocab_size=args.vocab_size,
+            window_pattern=args.window_pattern,
+            use_formula_counts=args.formula_counts,
+        )
+    else:
+        rows = make_model_size_table(
+            depths=depth_values,
+            aspect_ratios=aspect_ratio_values,
+            head_dim=args.head_dim,
+            head_dims=_parse_int_list(args.head_dims) if args.head_dims else None,
+            model_dims=_parse_int_list(args.model_dims) if args.model_dims else None,
+            max_seq_len=args.max_seq_len,
+            vocab_size=args.vocab_size,
+            window_pattern=args.window_pattern,
+            use_formula_counts=args.formula_counts,
+        )
     write_size_table(args.out, rows)
     ranked_triplets = rank_geometric_triplets(
         rows,

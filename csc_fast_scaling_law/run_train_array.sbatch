@@ -101,6 +101,7 @@ export CSC_DEPTH="$DEPTH"
 export CSC_RECIPE_BAND="$RECIPE_BAND"
 ASPECT_RATIO="${ASPECT_RATIO:-64}"
 HEAD_DIM="${HEAD_DIM:-128}"
+MODEL_DIM="${MODEL_DIM:-}"
 checkpoint_dir="${NANOCHAT_BASE_DIR}/base_checkpoints/${MODEL_TAG}"
 if [ -d "$checkpoint_dir" ] && find "$checkpoint_dir" -maxdepth 1 -type f | grep -q .; then
   echo "Checkpoint appears to exist, skipping: $checkpoint_dir"
@@ -114,6 +115,10 @@ fi
 fp8_args=()
 if [ "${FP8:-0}" = "1" ]; then
   fp8_args=(--fp8)
+fi
+model_dim_args=()
+if [ -n "${MODEL_DIM:-}" ] && [ "$MODEL_DIM" != "0" ] && [ "$MODEL_DIM" != "-1" ]; then
+  model_dim_args=(--model-dim "$MODEL_DIM")
 fi
 
 set +e
@@ -135,6 +140,7 @@ run_stage "$STAGE" \
     --depth="$DEPTH" \
     --aspect-ratio="$ASPECT_RATIO" \
     --head-dim="$HEAD_DIM" \
+    "${model_dim_args[@]}" \
     "${seed_args[@]}"
 rc="$?"
 set -e
