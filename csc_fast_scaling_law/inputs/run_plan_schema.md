@@ -27,6 +27,9 @@ required by the artifact contract. The reference-grid plan uses:
   `aspect_ratio=64` and `head_dim=128`. Use
   `python -m csc_fast_scaling_law.model_size_probe` to choose candidate
   architectures before submitting GPU jobs.
+- `model_dim`: optional explicit embedding width passed to `scripts.base_train`.
+  When present, it must be divisible by `head_dim` and takes precedence over
+  the default `ceil(depth * aspect_ratio / head_dim) * head_dim` sizing rule.
 
 Tracked example plans:
 
@@ -69,3 +72,11 @@ Tracked example plans:
   `12`, and uses `replicate_source_*` metadata instead of
   `source_campaign_id`/`verification_role` so these rows are not consumed as
   final-verification referee rows.
+- `roihu_reference_controlled_modeldim_hd64_smoke_seed0.csv`: three-row smoke
+  slice for the adviser-requested controlled-geometry line. It fixes
+  `depth=4`, `head_dim=64`, `window_pattern=L`, and `d_index=0`, while varying
+  explicit `model_dim=448,640,896`.
+- `roihu_reference_controlled_modeldim_hd64_3x3_seed0.csv`: full 3x3
+  controlled-geometry follow-up plan using the same fixed controls and explicit
+  `model_dim` values. Submit this only after the smoke slice verifies measured
+  `N_scaling` and artifact merging.
