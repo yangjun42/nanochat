@@ -105,11 +105,17 @@ across all final-verification seeds 1-5, depth 7 is the current mean leader
 held-out-BPB referee active before treating the allocation as fully settled,
 because the depth-7 seed variance remains visibly larger.
 
-The next tracked execution block is
-`inputs/roihu_reference_sizeprobe72_depth47_finalverify_seed6_10.csv`. It keeps
-the same depth-4/depth-7 same-data contenders and adds paired final-verification
-seeds `6` through `10` without changing the source campaign or using a fitted
-surface as oracle.
+Completed campaign
+`fsl-sizeprobe72-depth47-finalverify-seed6-10-seq-20260522-0640` ran the next
+tracked execution block,
+`inputs/roihu_reference_sizeprobe72_depth47_finalverify_seed6_10.csv`, with all
+ten train rows and all ten BPB eval rows completing successfully on
+`gpumedium`. Seed 6 favored depth 7, while seeds 7-10 favored depth 4. Across
+paired final-verification seeds 1-10, depth 4 is confirmed by the 10-seed
+referee (`1.155772` mean BPB versus depth 7 at `1.161703`) and wins 6/10 paired
+seeds. This confirms the source observed-grid depth-4 decision under the
+held-out BPB/final-verification referee, but it does not turn the gate-blocked
+strict real Delta-Ensemble path into a proven real-data algorithm claim.
 
 ## Smoke Flow
 
