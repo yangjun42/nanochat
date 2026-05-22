@@ -95,6 +95,16 @@ The next tracked plan is
 the same largest-data fixed-control setting and reruns only the unsettled
 depth-4/depth-7 contenders at seeds `3`, `4`, and `5`.
 
+Completed campaign `fsl-sizeprobe72-depth47-finalverify-seq-20260522-0110`
+ran all six train rows and all six BPB eval rows successfully on `gpumedium`.
+Seeds 3 and 4 favor depth 7 (`val_bpb=1.090444` and `1.104864`), while seed 5
+favors depth 4 (`val_bpb=1.142550` versus depth 7 at `1.200685`). The
+seed-extension mean final BPB is depth 4: `1.143270` and depth 7: `1.131998`;
+across all final-verification seeds 1-5, depth 7 is the current mean leader
+(`1.137976` versus depth 4 at `1.151946`) and wins 3/5 paired seeds. Keep the
+held-out-BPB referee active before treating the allocation as fully settled,
+because the depth-7 seed variance remains visibly larger.
+
 ## Smoke Flow
 
 ```bash
