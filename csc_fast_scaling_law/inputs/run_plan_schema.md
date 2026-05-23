@@ -80,3 +80,8 @@ Tracked example plans:
   controlled-geometry follow-up plan using the same fixed controls and explicit
   `model_dim` values. Submit this only after the smoke slice verifies measured
   `N_scaling` and artifact merging.
+- `roihu_reference_controlled_modeldim_hd64_5p_fd_smoke_seed1_3.csv`: paired
+  5-point finite-difference smoke for the controlled-geometry strict-gate
+  blocker. It keeps only `(n0,d0)`, `(n1,d0)`, `(n2,d0)`, `(n0,d1)`, and
+  `(n0,d2)` for seeds `1` through `3`, so the next Roihu spend checks
+  positive/shrinking BPB deltas before a full rerun.

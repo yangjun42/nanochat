@@ -126,7 +126,7 @@ The rows carry `replicate_source_*` metadata rather than
 new source surface for cell-mean strict-gate and Delta-Ensemble eligibility
 checks, not as final-verification referee rows.
 
-The controlled `model_dim` geometry line has two tracked plans:
+The controlled `model_dim` geometry line has three tracked plans:
 
 - `inputs/roihu_reference_controlled_modeldim_hd64_smoke_seed0.csv`: a 3-row
   smoke slice at `d_index=0` with `depth=4`, `head_dim=64`, and explicit
@@ -135,6 +135,11 @@ The controlled `model_dim` geometry line has two tracked plans:
 - `inputs/roihu_reference_controlled_modeldim_hd64_3x3_seed0.csv`: the full
   3x3 follow-up grid. Run it only after the smoke slice verifies measured
   `N_scaling` and artifact merging.
+- `inputs/roihu_reference_controlled_modeldim_hd64_5p_fd_smoke_seed1_3.csv`:
+  a paired-seed 5-point finite-difference smoke for the strict-gate blocker.
+  It runs `(n0,d0)`, `(n1,d0)`, `(n2,d0)`, `(n0,d1)`, and `(n0,d2)` for seeds
+  `1` through `3` to test whether positive/shrinking BPB deltas stabilize
+  before spending another full controlled-model-dim grid.
 
 ## Smoke Flow
 
