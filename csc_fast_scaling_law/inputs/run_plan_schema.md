@@ -85,3 +85,8 @@ Tracked example plans:
   blocker. It keeps only `(n0,d0)`, `(n1,d0)`, `(n2,d0)`, `(n0,d1)`, and
   `(n0,d2)` for seeds `1` through `3`, so the next Roihu spend checks
   positive/shrinking BPB deltas before a full rerun.
+- `roihu_reference_controlled_modeldim_hd64_low_overhead_5p_seed21.csv`:
+  single-seed 5-point source stencil for overhead accounting. It uses the same
+  five controlled-model-dim cells as the finite-difference smoke, but only seed
+  `21`, so the next Roihu spend can test whether a minimal estimator source
+  plan is cheaper than one best measured target-line run.

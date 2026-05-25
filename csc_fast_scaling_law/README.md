@@ -140,6 +140,11 @@ The controlled `model_dim` geometry line has three tracked plans:
   It runs `(n0,d0)`, `(n1,d0)`, `(n2,d0)`, `(n0,d1)`, and `(n0,d2)` for seeds
   `1` through `3` to test whether positive/shrinking BPB deltas stabilize
   before spending another full controlled-model-dim grid.
+- `inputs/roihu_reference_controlled_modeldim_hd64_low_overhead_5p_seed21.csv`:
+  a single-seed 5-point source stencil for overhead accounting. It uses the
+  same cells as the finite-difference smoke, but only seed `21`, to measure
+  whether the cheapest practical estimator source plan can fall below the best
+  measured target-line run before scaling to paired seeds.
 
 ## Smoke Flow
 
