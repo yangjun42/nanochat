@@ -145,6 +145,13 @@ The controlled `model_dim` geometry line has three tracked plans:
   same cells as the finite-difference smoke, but only seed `21`, to measure
   whether the cheapest practical estimator source plan can fall below the best
   measured target-line run before scaling to paired seeds.
+- `inputs/roihu_source_prefix_hd32_optgeo_5x5_seed26.csv` and
+  `inputs/roihu_source_prefix_hd32_optgeo_5x5_seed27.csv`: paired nested
+  5x5 source-prefix sweeps for the paper-facing Roihu estimator curves. They
+  fix `depth=4`, `head_dim=32`, `window_pattern=L`, and explicit
+  `model_dim=224,320,448,608,832`, giving `N_scaling` values from about
+  `9.75M` to `60.49M` with improved adjacent geometric error while covering
+  the measured target-line optimum from both sides.
 
 ## Smoke Flow
 
