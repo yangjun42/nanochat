@@ -152,6 +152,12 @@ The controlled `model_dim` geometry line has three tracked plans:
   `model_dim=224,320,448,608,832`, giving `N_scaling` values from about
   `9.75M` to `60.49M` with improved adjacent geometric error while covering
   the measured target-line optimum from both sides.
+- `inputs/roihu_source_sparse_farseer_hd64_smalln_9p_seed35_36.csv` and
+  `inputs/roihu_source_sparse_farseer_hd64_smalln_9p_seed37_40.csv`: sparse
+  Farseer 9-point source paths for the measured target-line replay. Each seed
+  runs the same 19 non-contiguous source cells that support the q=3, q=4, and
+  q=5 3x3 triplets, so the experiment can separate source-seed variance from
+  changes in the acquisition grid.
 
 ## Smoke Flow
 

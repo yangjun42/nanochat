@@ -90,3 +90,8 @@ Tracked example plans:
   five controlled-model-dim cells as the finite-difference smoke, but only seed
   `21`, so the next Roihu spend can test whether a minimal estimator source
   plan is cheaper than one best measured target-line run.
+- `roihu_source_sparse_farseer_hd64_smalln_9p_seed35_36.csv` and
+  `roihu_source_sparse_farseer_hd64_smalln_9p_seed37_40.csv`: sparse Farseer
+  9-point source paths. Each seed uses the same 19 source cells for q=3, q=4,
+  and q=5 triplets; the second file extends source-seed support for variance
+  analysis without changing the acquisition grid.
