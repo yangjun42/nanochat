@@ -9,10 +9,7 @@ import numbers
 from pathlib import Path
 from typing import Any, Iterable
 
-import torch
-
 from csc_fast_scaling_law.model_shape import resolve_model_shape
-from nanochat.gpt import GPT, GPTConfig
 
 
 SIZE_FIELDNAMES = [
@@ -201,6 +198,9 @@ def make_model_size_row(
     window_pattern: str = "L",
 ) -> dict[str, int | float | str]:
     """Return nanochat model size metadata without allocating real weights."""
+
+    import torch
+    from nanochat.gpt import GPT, GPTConfig
 
     if min(depth, aspect_ratio, head_dim, max_seq_len, vocab_size) <= 0:
         raise ValueError("depth, aspect_ratio, head_dim, max_seq_len, and vocab_size must be positive")

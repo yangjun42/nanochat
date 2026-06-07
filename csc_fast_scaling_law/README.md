@@ -158,6 +158,13 @@ The controlled `model_dim` geometry line has three tracked plans:
   runs the same 19 non-contiguous source cells that support the q=3, q=4, and
   q=5 3x3 triplets, so the experiment can separate source-seed variance from
   changes in the acquisition grid.
+- `inputs/roihu_target_line_hd64_x20_noncenter_9pt_seed45_46.csv` and
+  `inputs/roihu_target_line_hd64_x22p5_noncenter_9pt_seed47_48.csv`: wider
+  measured target-line referee extensions. They use model_dim values from 512
+  through 1536 to test whether the low-overhead decision result survives when
+  the measured optimum is not explained by the center index. Submitted Roihu
+  campaigns are `fsl-targetline-hd64-x20-noncenter-9pt-seed45-46-20260607-0925`
+  and `fsl-targetline-hd64-x22p5-noncenter-9pt-seed47-48-20260607-0925`.
 
 ## Smoke Flow
 
