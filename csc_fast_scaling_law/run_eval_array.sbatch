@@ -7,7 +7,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=4
 #SBATCH --cpus-per-task=7
-#SBATCH --gpus-per-node=4
+#SBATCH --gpus-per-node=gh200:4
 #SBATCH --mem=480G
 #SBATCH --output=%x-%A_%a.out
 
