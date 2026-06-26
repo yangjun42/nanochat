@@ -45,6 +45,7 @@ parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('d
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 parser.add_argument("--seed", type=int, default=42, help="random seed for model initialization")
+parser.add_argument("--train-row-group-start", type=int, default=0, help="starting parquet row group for the train dataloader")
 # FP8 training
 parser.add_argument("--fp8", action="store_true", help="enable FP8 training (requires H100+ GPU and torchao)")
 parser.add_argument("--fp8-recipe", type=str, default="tensorwise", choices=["rowwise", "tensorwise"], help="FP8 scaling recipe: tensorwise (faster, recommended) or rowwise (more accurate but slower)")
@@ -356,7 +357,15 @@ if scaler is not None:
 # -----------------------------------------------------------------------------
 # Initialize the DataLoaders for train/val
 dataloader_resume_state_dict = None if not resuming else meta_data["dataloader_state_dict"]
-train_loader = tokenizing_distributed_data_loader_with_state_bos_bestfit(tokenizer, args.device_batch_size, args.max_seq_len, split="train", device=device, resume_state_dict=dataloader_resume_state_dict)
+train_loader = tokenizing_distributed_data_loader_with_state_bos_bestfit(
+    tokenizer,
+    args.device_batch_size,
+    args.max_seq_len,
+    split="train",
+    device=device,
+    resume_state_dict=dataloader_resume_state_dict,
+    row_group_start=args.train_row_group_start,
+)
 build_val_loader = lambda: tokenizing_distributed_data_loader_bos_bestfit(tokenizer, args.device_batch_size, args.max_seq_len, split="val", device=device)
 x, y, dataloader_state_dict = next(train_loader) # kick off load of the very first batch of data
 
@@ -648,6 +657,7 @@ get_report().log(section="Base model training", data=[
         "Number of parameters": num_params,
         "Number of scaling parameters": num_scaling_params,
         "Seed": args.seed,
+        "Train row-group start": args.train_row_group_start,
         "Horizon source": horizon_source,
         "D_target": D_target,
         "D_actual": D_actual,

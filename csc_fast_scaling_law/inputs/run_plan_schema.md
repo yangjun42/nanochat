@@ -30,6 +30,9 @@ required by the artifact contract. The reference-grid plan uses:
 - `model_dim`: optional explicit embedding width passed to `scripts.base_train`.
   When present, it must be divisible by `head_dim` and takes precedence over
   the default `ceil(depth * aspect_ratio / head_dim) * head_dim` sizing rule.
+- `train_row_group_start`: optional train-loader row-group start passed to
+  `scripts.base_train`. Leave it absent or `0` for the default data order; use
+  nonzero values only for controlled data-order noise diagnostics.
 
 Tracked example plans:
 

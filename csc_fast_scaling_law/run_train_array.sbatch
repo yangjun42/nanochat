@@ -112,6 +112,10 @@ seed_args=()
 if grep -q 'parser.add_argument("--seed"' scripts/base_train.py; then
   seed_args=(--seed "$SEED")
 fi
+train_row_group_args=()
+if [ -n "${TRAIN_ROW_GROUP_START:-}" ] && grep -q 'parser.add_argument("--train-row-group-start"' scripts/base_train.py; then
+  train_row_group_args=(--train-row-group-start "$TRAIN_ROW_GROUP_START")
+fi
 fp8_args=()
 if [ "${FP8:-0}" = "1" ]; then
   fp8_args=(--fp8)
@@ -141,7 +145,8 @@ run_stage "$STAGE" \
     --aspect-ratio="$ASPECT_RATIO" \
     --head-dim="$HEAD_DIM" \
     "${model_dim_args[@]}" \
-    "${seed_args[@]}"
+    "${seed_args[@]}" \
+    "${train_row_group_args[@]}"
 rc="$?"
 set -e
 
