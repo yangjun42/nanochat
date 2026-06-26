@@ -216,6 +216,94 @@ def test_collect_campaign_parses_current_base_train_parameter_table(tmp_path: Pa
     assert rows[0]["val_bpb_final"] == "1.111"
 
 
+def test_collect_campaign_preserves_eval_shard_bpb_values(tmp_path: Path) -> None:
+    plan = tmp_path / "plan.csv"
+    with plan.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "stage",
+                "split",
+                "recipe_band",
+                "depth",
+                "seed",
+                "num_iterations",
+                "target_tokens",
+                "total_batch_size",
+                "device_batch_size",
+                "max_seq_len",
+                "warmup_steps",
+                "fp8",
+                "window_pattern",
+                "model_tag",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "stage": "eval_shards",
+                "split": "target_line_referee",
+                "recipe_band": "canonical",
+                "depth": "4",
+                "seed": "0",
+                "num_iterations": "64",
+                "target_tokens": "33554432",
+                "total_batch_size": "524288",
+                "device_batch_size": "16",
+                "max_seq_len": "2048",
+                "warmup_steps": "40",
+                "fp8": "1",
+                "window_pattern": "L",
+                "model_tag": "fsl-eval-shards",
+            }
+        )
+    train_metrics = tmp_path / "train_metrics"
+    eval_metrics = tmp_path / "eval_metrics"
+    train_logs = tmp_path / "train_logs"
+    eval_logs = tmp_path / "eval_logs"
+    train_metrics.mkdir()
+    eval_metrics.mkdir()
+    train_logs.mkdir()
+    eval_logs.mkdir()
+    (train_logs / "eval_shards.log").write_text(
+        "N_scaling: 1000\nflops_per_token_est: 2000\n",
+        encoding="utf-8",
+    )
+    (eval_logs / "bpb_eval_shards.log").write_text(
+        "\n".join(
+            [
+                "val@rg0 bpb: 1.000000",
+                "val@rg16 bpb: 1.030000",
+                "val@rg32 bpb: 0.970000",
+                "val bpb: 1.000000",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (train_metrics / "stage_metrics.jsonl").write_text(
+        json.dumps({"stage": "eval_shards", "elapsed_seconds": 10, "exit_code": 0})
+        + "\n",
+        encoding="utf-8",
+    )
+    (eval_metrics / "stage_metrics.jsonl").write_text(
+        json.dumps({"stage": "bpb_eval_shards", "elapsed_seconds": 4, "exit_code": 0})
+        + "\n",
+        encoding="utf-8",
+    )
+
+    outputs = collect_campaign(
+        plan_csv=plan,
+        train_metrics_dir=train_metrics,
+        eval_metrics_dir=eval_metrics,
+        out_dir=tmp_path / "out",
+    )
+
+    rows = list(csv.DictReader(outputs["fit_ready_cells_csv"].open(newline="", encoding="utf-8")))
+    assert rows[0]["val_bpb_final"] == "1.0"
+    assert rows[0]["val_bpb_shards_json"] == '{"0": 1.0, "16": 1.03, "32": 0.97}'
+    assert float(rows[0]["val_bpb_shard_std"]) > 0.02
+
+
 def test_slurm_wrappers_use_local_wandb_stub() -> None:
     root = Path(__file__).resolve().parents[1]
     train_script = (root / "csc_fast_scaling_law" / "run_train_array.sbatch").read_text(encoding="utf-8")

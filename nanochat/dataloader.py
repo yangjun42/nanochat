@@ -22,7 +22,7 @@ import pyarrow.parquet as pq
 from nanochat.common import get_dist_info
 from nanochat.dataset import list_parquet_files
 
-def _document_batches(split, resume_state_dict, tokenizer_batch_size):
+def _document_batches(split, resume_state_dict, tokenizer_batch_size, row_group_start=0):
     """
     Infinite iterator over document batches (list of text strings) from parquet files.
 
@@ -40,6 +40,7 @@ def _document_batches(split, resume_state_dict, tokenizer_batch_size):
     resume_pq_idx = resume_state_dict["pq_idx"] if resume_state_dict is not None else 0
     resume_rg_idx = resume_state_dict["rg_idx"] if resume_state_dict is not None else None
     resume_epoch = resume_state_dict.get("epoch", 1) if resume_state_dict is not None else 1
+    row_group_start = int(row_group_start)
     first_pass = True
     pq_idx = resume_pq_idx
     epoch = resume_epoch
@@ -59,7 +60,7 @@ def _document_batches(split, resume_state_dict, tokenizer_batch_size):
                     continue
                 resume_rg_idx = None  # only do this once
             else:
-                rg_idx = ddp_rank
+                rg_idx = row_group_start + ddp_rank
             while rg_idx < pf.num_row_groups:
                 rg = pf.read_row_group(rg_idx)
                 batch = rg.column('text').to_pylist()
@@ -75,7 +76,8 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
     tokenizer, B, T, split,
     tokenizer_threads=4, tokenizer_batch_size=128,
     device="cuda", resume_state_dict=None,
-    buffer_size=1000
+    buffer_size=1000,
+    row_group_start=0,
 ):
     """
     BOS-aligned dataloader with Best-Fit Cropping.
@@ -96,7 +98,7 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
     assert split in ["train", "val"], "split must be 'train' or 'val'"
 
     row_capacity = T + 1
-    batches = _document_batches(split, resume_state_dict, tokenizer_batch_size)
+    batches = _document_batches(split, resume_state_dict, tokenizer_batch_size, row_group_start=row_group_start)
     bos_token = tokenizer.get_bos_token_id()
     doc_buffer = []
     pq_idx, rg_idx, epoch = 0, 0, 1

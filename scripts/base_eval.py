@@ -175,6 +175,36 @@ def evaluate_core(model, tokenizer, device, max_per_task=-1):
 # -----------------------------------------------------------------------------
 # Main
 
+def parse_bpb_val_row_group_starts(raw: str) -> list[int]:
+    values = [part.strip() for part in str(raw).split(",") if part.strip()]
+    if not values:
+        return [0]
+    starts = [int(value) for value in values]
+    if any(value < 0 for value in starts):
+        raise ValueError("row-group starts must be non-negative")
+    return starts
+
+
+def make_bpb_eval_plan(raw_splits: str, val_row_group_starts: list[int]) -> list[tuple[str, int, str]]:
+    splits = [part.strip() for part in str(raw_splits).split(",") if part.strip()]
+    if not splits:
+        splits = ["train", "val"]
+    invalid = sorted(set(splits) - {"train", "val"})
+    if invalid:
+        raise ValueError(f"invalid BPB splits: {invalid}")
+    starts = val_row_group_starts or [0]
+    plan: list[tuple[str, int, str]] = []
+    for split_name in splits:
+        if split_name == "train":
+            plan.append(("train", 0, "train"))
+        elif len(starts) == 1 and int(starts[0]) == 0:
+            plan.append(("val", 0, "val"))
+        else:
+            for start in starts:
+                plan.append(("val", int(start), f"val@rg{int(start)}"))
+    return plan
+
+
 def main():
     parser = argparse.ArgumentParser(description="Base model evaluation")
     parser.add_argument('--eval', type=str, default='core,bpb,sample', help='Comma-separated evaluations to run: core,bpb,sample (default: all)')
@@ -184,6 +214,8 @@ def main():
     parser.add_argument('--max-per-task', type=int, default=-1, help='Max examples per CORE task (-1 = all)')
     parser.add_argument('--device-batch-size', type=int, default=32, help='Per-device batch size for BPB evaluation')
     parser.add_argument('--split-tokens', type=int, default=40*524288, help='Number of tokens to evaluate per split for BPB')
+    parser.add_argument('--bpb-splits', type=str, default='train,val', help='Comma-separated BPB splits to evaluate: train,val')
+    parser.add_argument('--bpb-val-row-group-starts', type=str, default='0', help='Comma-separated validation row-group starts for BPB shard/noise diagnostics')
     parser.add_argument('--device-type', type=str, default='', help='cuda|cpu|mps (empty = autodetect)')
     args = parser.parse_args()
 
@@ -269,11 +301,25 @@ def main():
             print0(f"Adjusted split_tokens to {args.split_tokens} (must be divisible by {tokens_per_step})")
         steps = args.split_tokens // tokens_per_step
 
-        for split_name in ["train", "val"]:
-            loader = tokenizing_distributed_data_loader_bos_bestfit(tokenizer, args.device_batch_size, sequence_len, split_name, device=device)
+        eval_plan = make_bpb_eval_plan(args.bpb_splits, parse_bpb_val_row_group_starts(args.bpb_val_row_group_starts))
+        val_shard_values = []
+        for split_name, row_group_start, result_key in eval_plan:
+            loader = tokenizing_distributed_data_loader_bos_bestfit(
+                tokenizer,
+                args.device_batch_size,
+                sequence_len,
+                split_name,
+                device=device,
+                row_group_start=row_group_start,
+            )
             bpb = evaluate_bpb(model, loader, steps, token_bytes)
-            bpb_results[split_name] = bpb
-            print0(f"{split_name} bpb: {bpb:.6f}")
+            bpb_results[result_key] = bpb
+            if split_name == "val":
+                val_shard_values.append(bpb)
+            print0(f"{result_key} bpb: {bpb:.6f}")
+        if val_shard_values and "val" not in bpb_results:
+            bpb_results["val"] = sum(val_shard_values) / len(val_shard_values)
+            print0(f"val bpb: {bpb_results['val']:.6f}")
 
     # --- CORE evaluation ---
     if 'core' in eval_modes:

@@ -34,6 +34,8 @@ export CSC_RUN_KIND="${CSC_RUN_KIND:-fsl_bpb_eval}"
 export GPU_SAMPLE_INTERVAL_SECONDS="${GPU_SAMPLE_INTERVAL_SECONDS:-5}"
 SPLIT_TOKENS="${SPLIT_TOKENS:-33554432}"
 EVAL_DEVICE_BATCH_SIZE="${EVAL_DEVICE_BATCH_SIZE:-16}"
+BPB_SPLITS="${BPB_SPLITS:-train,val}"
+BPB_VAL_ROW_GROUP_STARTS="${BPB_VAL_ROW_GROUP_STARTS:-0}"
 unset LD_PRELOAD
 
 mkdir -p "$CSC_METRICS_DIR" "$CSC_LOG_DIR"
@@ -94,7 +96,9 @@ run_stage "$eval_stage" \
     --eval=bpb \
     --model-tag="$MODEL_TAG" \
     --device-batch-size="$EVAL_DEVICE_BATCH_SIZE" \
-    --split-tokens="$SPLIT_TOKENS"
+    --split-tokens="$SPLIT_TOKENS" \
+    --bpb-splits="$BPB_SPLITS" \
+    --bpb-val-row-group-starts="$BPB_VAL_ROW_GROUP_STARTS"
 rc="$?"
 set -e
 

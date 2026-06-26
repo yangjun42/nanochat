@@ -45,6 +45,9 @@ METRIC_FIELDS = [
     "eval_wall_seconds",
     "train_bpb_final",
     "val_bpb_final",
+    "val_bpb_shards_json",
+    "val_bpb_shard_mean",
+    "val_bpb_shard_std",
     "train_exit_code",
     "eval_exit_code",
     "train_partition",
@@ -110,6 +113,21 @@ def parse_log(path: Path | None) -> dict[str, float]:
                 "train_bpb_minimum": "train_bpb_final",
             }.get(key, key)
             out[canonical_key] = float(matches[-1].replace(",", ""))
+
+    val_shards: dict[str, float] = {}
+    for row_group_start, raw in re.findall(r"\bval@rg([0-9]+)\s+bpb:\s*([0-9.eE+-]+)", text):
+        val_shards[str(int(row_group_start))] = float(raw.replace(",", ""))
+    if val_shards:
+        values = list(val_shards.values())
+        mean = sum(values) / len(values)
+        if len(values) > 1:
+            variance = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+            std = math.sqrt(variance)
+        else:
+            std = 0.0
+        out["val_bpb_shards_json"] = json.dumps(val_shards, sort_keys=True)
+        out["val_bpb_shard_mean"] = mean
+        out["val_bpb_shard_std"] = std
 
     parameter_counts: dict[str, float] = {}
     for key, raw in re.findall(r"^([A-Za-z0-9_]+)\s*:\s*([0-9][0-9,]*)\s*$", text, flags=re.MULTILINE):
