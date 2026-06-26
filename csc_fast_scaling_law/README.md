@@ -191,6 +191,10 @@ falling through to a remote `Permission denied (publickey)` error.
 
 ## Sequential Fallback
 
+Roihu GA note: as of the 2026-06-29 GA transition, the former `pilot` and
+`gpupilot` partitions no longer accept new jobs. Use `gpumedium` for GPU runs
+and `medium` for CPU-only jobs unless the project allocation changes.
+
 If Slurm rejects an array with `AssocMaxSubmitJobLimit`, use the sequential
 wrappers for small grids. They submit a single Slurm job and run the selected
 plan rows one after another on the same allocation while reusing the same
