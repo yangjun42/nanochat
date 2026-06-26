@@ -200,14 +200,14 @@ per-row array wrappers:
 CAMPAIGN_ID=fsl-sizeprobe72-3x3-YYYYMMDD-HHMM \
 PLAN_CSV=/scratch/project_2017828/$USER/nanochat/csc_fast_scaling_law/inputs/roihu_reference_sizeprobe72_3x3_seed0.csv \
 NANOCHAT_BASE_DIR=/scratch/project_2017828/$USER/nanochat-cache/$CAMPAIGN_ID \
-sbatch --partition=gpuinteractive --time=02:00:00 \
+sbatch --partition=gpumedium --time=06:00:00 \
   csc_fast_scaling_law/run_train_sequence.sbatch
 
 # After training succeeds:
 CAMPAIGN_ID=fsl-sizeprobe72-3x3-YYYYMMDD-HHMM \
 PLAN_CSV=/scratch/project_2017828/$USER/nanochat/csc_fast_scaling_law/inputs/roihu_reference_sizeprobe72_3x3_seed0.csv \
 NANOCHAT_BASE_DIR=/scratch/project_2017828/$USER/nanochat-cache/$CAMPAIGN_ID \
-sbatch --partition=gpuinteractive --time=01:00:00 \
+sbatch --partition=gpumedium --time=03:00:00 \
   csc_fast_scaling_law/run_eval_sequence.sbatch
 ```
 
