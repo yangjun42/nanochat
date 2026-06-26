@@ -165,6 +165,11 @@ The controlled `model_dim` geometry line has three tracked plans:
   the measured optimum is not explained by the center index. Submitted Roihu
   campaigns are `fsl-targetline-hd64-x20-noncenter-9pt-seed45-46-20260607-0925`
   and `fsl-targetline-hd64-x22p5-noncenter-9pt-seed47-48-20260607-0925`.
+- `inputs/roihu_target_neighborhood_x30_righttail_seed71_72_20260626.csv`:
+  compact measured target-neighborhood extension for the x30 right tail. It
+  adds `-0.25` and `+0.25` parallel budget-line offsets for target-line indices
+  `6..10` at seeds `71` and `72`. This is a local-surface/model-mismatch
+  diagnostic, not a fixed-budget regret result.
 
 ## Smoke Flow
 
