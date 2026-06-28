@@ -45,6 +45,7 @@ parser.add_argument("--run", type=str, default="dummy", help="wandb run name ('d
 # Runtime
 parser.add_argument("--device-type", type=str, default="", help="cuda|cpu|mps (empty = autodetect)")
 parser.add_argument("--seed", type=int, default=42, help="random seed for model initialization")
+parser.add_argument("--init-seed", type=int, default=-1, help="optional seed for model initialization; defaults to --seed")
 parser.add_argument("--train-row-group-start", type=int, default=0, help="starting parquet row group for the train dataloader")
 # FP8 training
 parser.add_argument("--fp8", action="store_true", help="enable FP8 training (requires H100+ GPU and torchao)")
@@ -89,10 +90,12 @@ user_config = vars(args).copy()  # for logging
 
 device_type = autodetect_device_type() if args.device_type == "" else args.device_type
 ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
-torch.manual_seed(args.seed)
+effective_init_seed = args.seed if args.init_seed < 0 else args.init_seed
+torch.manual_seed(effective_init_seed)
 if device_type == "cuda":
-    torch.cuda.manual_seed_all(args.seed)
+    torch.cuda.manual_seed_all(effective_init_seed)
 print0(f"Random seed: {args.seed}")
+print0(f"Init seed: {effective_init_seed}")
 master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
 synchronize = torch.cuda.synchronize if device_type == "cuda" else lambda: None
 get_max_memory = torch.cuda.max_memory_allocated if device_type == "cuda" else lambda: 0
@@ -657,6 +660,7 @@ get_report().log(section="Base model training", data=[
         "Number of parameters": num_params,
         "Number of scaling parameters": num_scaling_params,
         "Seed": args.seed,
+        "Init seed": effective_init_seed,
         "Train row-group start": args.train_row_group_start,
         "Horizon source": horizon_source,
         "D_target": D_target,

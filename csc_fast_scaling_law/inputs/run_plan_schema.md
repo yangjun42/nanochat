@@ -33,6 +33,11 @@ required by the artifact contract. The reference-grid plan uses:
 - `train_row_group_start`: optional train-loader row-group start passed to
   `scripts.base_train`. Leave it absent or `0` for the default data order; use
   nonzero values only for controlled data-order noise diagnostics.
+- `init_seed`: optional model-initialization seed passed to
+  `scripts.base_train`. When omitted, initialization uses `seed` as before. Use
+  a shared `init_seed` across a finite-difference support to run a
+  common-random-initialization diagnostic without changing the held-out target
+  oracle.
 
 Tracked example plans:
 

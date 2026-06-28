@@ -112,6 +112,10 @@ seed_args=()
 if grep -q 'parser.add_argument("--seed"' scripts/base_train.py; then
   seed_args=(--seed "$SEED")
 fi
+init_seed_args=()
+if [ -n "${INIT_SEED:-}" ] && grep -q 'parser.add_argument("--init-seed"' scripts/base_train.py; then
+  init_seed_args=(--init-seed "$INIT_SEED")
+fi
 train_row_group_args=()
 if [ -n "${TRAIN_ROW_GROUP_START:-}" ] && grep -q 'parser.add_argument("--train-row-group-start"' scripts/base_train.py; then
   train_row_group_args=(--train-row-group-start "$TRAIN_ROW_GROUP_START")
@@ -146,6 +150,7 @@ run_stage "$STAGE" \
     --head-dim="$HEAD_DIM" \
     "${model_dim_args[@]}" \
     "${seed_args[@]}" \
+    "${init_seed_args[@]}" \
     "${train_row_group_args[@]}"
 rc="$?"
 set -e
