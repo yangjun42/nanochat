@@ -170,7 +170,11 @@ def make_target_line_rows(
 def write_target_line_plan(path: Path, rows: list[dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=TARGET_LINE_FIELDNAMES)
+        writer = csv.DictWriter(
+            f,
+            fieldnames=TARGET_LINE_FIELDNAMES,
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 

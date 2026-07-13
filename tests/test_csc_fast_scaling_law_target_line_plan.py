@@ -76,4 +76,4 @@ def test_write_target_line_plan_uses_stable_field_order(tmp_path: Path) -> None:
         body = list(reader)
     assert header == TARGET_LINE_FIELDNAMES
     assert len(body) == 2
-
+    assert b"\r\n" not in out.read_bytes()
