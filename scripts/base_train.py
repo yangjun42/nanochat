@@ -33,6 +33,11 @@ from nanochat.checkpoint_manager import save_checkpoint, load_checkpoint
 from nanochat.loss_eval import evaluate_bpb
 from nanochat.engine import Engine
 from nanochat.flash_attention import HAS_FA3
+from nanochat.optimizer_schedule import (
+    learning_rate_multiplier,
+    muon_momentum,
+    weight_decay_multiplier,
+)
 from scripts.base_eval import evaluate_core
 from csc_fast_scaling_law.model_shape import resolve_model_shape
 print_banner()
@@ -432,33 +437,28 @@ print0(f"Total training FLOPs estimate: {num_flops_per_token * total_tokens:e}")
 
 # Learning rate schedule (linear warmup, constant, linear warmdown)
 def get_lr_multiplier(it):
-    warmup_iters = args.warmup_steps
-    warmdown_iters = round(args.warmdown_ratio * num_iterations)
-    if it < warmup_iters:
-        return (it + 1) / warmup_iters
-    elif it <= num_iterations - warmdown_iters:
-        return 1.0
-    else:
-        progress = (num_iterations - it) / warmdown_iters
-        return progress * 1.0 + (1 - progress) * args.final_lr_frac
+    return learning_rate_multiplier(
+        it,
+        num_iterations=num_iterations,
+        warmup_steps=args.warmup_steps,
+        warmdown_ratio=args.warmdown_ratio,
+        final_lr_fraction=args.final_lr_frac,
+    )
 
 # Momentum scheduler for Muon optimizer (warms up to 0.97, warms down to 0.90 during LR warmdown)
 def get_muon_momentum(it):
-    momentum_warmup_iters = args.muon_momentum_warmup_steps
-    warmdown_iters = round(args.warmdown_ratio * num_iterations)
-    warmdown_start = num_iterations - warmdown_iters
-    if momentum_warmup_iters > 0 and it < momentum_warmup_iters:
-        frac = it / momentum_warmup_iters
-        return (1 - frac) * 0.85 + frac * 0.97
-    elif it >= warmdown_start:
-        progress = (it - warmdown_start) / warmdown_iters
-        return 0.97 * (1 - progress) + 0.90 * progress
-    else:
-        return 0.97
+    return muon_momentum(
+        it,
+        num_iterations=num_iterations,
+        warmup_steps=args.muon_momentum_warmup_steps,
+        warmdown_ratio=args.warmdown_ratio,
+    )
 
 # Weight decay scheduler for Muon optimizer (cosine decay to zero over the course of training)
 def get_weight_decay(it):
-    return weight_decay_scaled * 0.5 * (1 + math.cos(math.pi * it / num_iterations))
+    return weight_decay_scaled * weight_decay_multiplier(
+        it, num_iterations=num_iterations
+    )
 
 # -----------------------------------------------------------------------------
 # Training loop
