@@ -16,6 +16,8 @@ def test_base_train_exposes_scaling_law_campaign_arguments_and_logs() -> None:
     assert "Horizon source" in source
     assert "D_actual" in source
     assert "weight_decay_horizon_tokens" in source
+    assert "current_muon_momentum = get_muon_momentum(step)" in source
+    assert "\n    muon_momentum = get_muon_momentum(step)" not in source
 
 
 def test_roihu_train_harness_forwards_optimizer_horizon_controls() -> None:
