@@ -124,6 +124,17 @@ model_dim_args=()
 if [ -n "${MODEL_DIM:-}" ] && [ "$MODEL_DIM" != "0" ] && [ "$MODEL_DIM" != "-1" ]; then
   model_dim_args=(--model-dim "$MODEL_DIM")
 fi
+optimizer_horizon_args=()
+if grep -q 'parser.add_argument("--muon-momentum-warmup-steps"' scripts/base_train.py; then
+  optimizer_horizon_args+=(
+    --muon-momentum-warmup-steps="${MUON_MOMENTUM_WARMUP_STEPS:-400}"
+  )
+fi
+if grep -q 'parser.add_argument("--weight-decay-horizon-tokens"' scripts/base_train.py; then
+  optimizer_horizon_args+=(
+    --weight-decay-horizon-tokens="${WEIGHT_DECAY_HORIZON_TOKENS:--1}"
+  )
+fi
 
 set +e
 run_stage "$STAGE" \
@@ -145,6 +156,7 @@ run_stage "$STAGE" \
     --aspect-ratio="$ASPECT_RATIO" \
     --head-dim="$HEAD_DIM" \
     "${model_dim_args[@]}" \
+    "${optimizer_horizon_args[@]}" \
     "${seed_args[@]}" \
     "${train_row_group_args[@]}"
 rc="$?"

@@ -25,6 +25,8 @@ METRIC_FIELDS = [
     "device_batch_size",
     "max_seq_len",
     "warmup_steps",
+    "muon_momentum_warmup_steps",
+    "weight_decay_horizon_tokens",
     "fp8",
     "window_pattern",
     "model_tag",

@@ -70,6 +70,8 @@ parser.add_argument("--weight-decay", type=float, default=0.28, help="cautious w
 parser.add_argument("--matrix-lr", type=float, default=0.02, help="learning rate for matrix parameters (Muon)")
 parser.add_argument("--scalar-lr", type=float, default=0.5, help="learning rate for scalars (resid_lambdas, x0_lambdas)")
 parser.add_argument("--warmup-steps", type=int, default=40, help="number of steps for LR warmup")
+parser.add_argument("--muon-momentum-warmup-steps", type=int, default=400, help="number of steps for Muon momentum warmup")
+parser.add_argument("--weight-decay-horizon-tokens", type=int, default=-1, help="token horizon used to scale weight decay (-1 = legacy target-token horizon)")
 parser.add_argument("--warmdown-ratio", type=float, default=0.65, help="ratio of iterations for LR warmdown")
 parser.add_argument("--final-lr-frac", type=float, default=0.05, help="final LR as fraction of initial LR")
 parser.add_argument("--resume-from-step", type=int, default=-1, help="resume training from this step (-1 = disable)")
@@ -83,6 +85,10 @@ parser.add_argument("--save-every", type=int, default=-1, help="save checkpoints
 # Output
 parser.add_argument("--model-tag", type=str, default=None, help="override model tag for checkpoint directory name")
 args = parser.parse_args()
+if args.muon_momentum_warmup_steps < 0:
+    parser.error("--muon-momentum-warmup-steps must be nonnegative")
+if args.weight_decay_horizon_tokens == 0 or args.weight_decay_horizon_tokens < -1:
+    parser.error("--weight-decay-horizon-tokens must be -1 or positive")
 user_config = vars(args).copy()  # for logging
 # -----------------------------------------------------------------------------
 # Compute init and wandb logging
@@ -328,9 +334,27 @@ if batch_ratio != 1.0:
 # Above, we used learning rate scaling η ∝ √(B/B_ref). So it's a matter of ~10 lines of math to derive that to keep T_epoch constant, we need:
 # λ = λ_ref · √(B/B_ref) · (D_ref/D)
 # Note that these papers study AdamW, *not* Muon. We are blindly following AdamW theory for scaling hoping it ~works for Muon too.
-weight_decay_scaled = args.weight_decay * math.sqrt(total_batch_size / B_REF) * (D_REF / target_tokens)
+weight_decay_horizon_tokens = (
+    args.weight_decay_horizon_tokens
+    if args.weight_decay_horizon_tokens > 0
+    else target_tokens
+)
+weight_decay_horizon_source = (
+    "explicit_weight_decay_horizon_tokens"
+    if args.weight_decay_horizon_tokens > 0
+    else target_tokens_source
+)
+weight_decay_scaled = (
+    args.weight_decay
+    * math.sqrt(total_batch_size / B_REF)
+    * (D_REF / weight_decay_horizon_tokens)
+)
 if weight_decay_scaled != args.weight_decay:
-    print0(f"Scaling weight decay from {args.weight_decay:.6f} to {weight_decay_scaled:.6f} for depth {args.depth}")
+    print0(
+        f"Scaling weight decay from {args.weight_decay:.6f} to "
+        f"{weight_decay_scaled:.6f} using {weight_decay_horizon_tokens:,} horizon tokens"
+    )
+print0(f"Weight decay horizon source: {weight_decay_horizon_source}")
 
 # -----------------------------------------------------------------------------
 # Initialize the Optimizer (combined MuonAdamW: Muon for matrix params, AdamW for rest)
@@ -420,10 +444,11 @@ def get_lr_multiplier(it):
 
 # Momentum scheduler for Muon optimizer (warms up to 0.97, warms down to 0.90 during LR warmdown)
 def get_muon_momentum(it):
+    momentum_warmup_iters = args.muon_momentum_warmup_steps
     warmdown_iters = round(args.warmdown_ratio * num_iterations)
     warmdown_start = num_iterations - warmdown_iters
-    if it < 400:
-        frac = it / 400
+    if momentum_warmup_iters > 0 and it < momentum_warmup_iters:
+        frac = it / momentum_warmup_iters
         return (1 - frac) * 0.85 + frac * 0.97
     elif it >= warmdown_start:
         progress = (it - warmdown_start) / warmdown_iters
@@ -667,6 +692,9 @@ get_report().log(section="Base model training", data=[
         "Tokens : Scaling params ratio": total_batch_size * num_iterations / num_scaling_params,
         "DDP world size": ddp_world_size,
         "warmup_steps": args.warmup_steps,
+        "muon_momentum_warmup_steps": args.muon_momentum_warmup_steps,
+        "weight_decay_horizon_tokens": weight_decay_horizon_tokens,
+        "weight_decay_horizon_source": weight_decay_horizon_source,
         "warmdown_ratio": args.warmdown_ratio,
         "final_lr_frac": args.final_lr_frac,
     },
