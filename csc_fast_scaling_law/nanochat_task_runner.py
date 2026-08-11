@@ -909,14 +909,32 @@ for module_name, module in sorted(sys.modules.items()):
         continue
     path = Path(raw_path).resolve()
     in_fa3_root = fa3_root is not None and (path == fa3_root or fa3_root in path.parents)
-    if not in_fa3_root and "flash" not in module_name.lower():
+    if not in_fa3_root:
         continue
     if not path.is_file() or path.suffix not in {".py", ".so"}:
         continue
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     fa3_loaded_files.append({"module": module_name, "path": str(path), "sha256": digest})
+covered_fa3_paths = {item["path"] for item in fa3_loaded_files}
+for raw_path in getattr(fa3_interface, "__fa3_artifact_files__", ()):
+    path = Path(raw_path).resolve()
+    if str(path) in covered_fa3_paths:
+        continue
+    if not path.is_file() or path.suffix not in {".py", ".so"}:
+        raise RuntimeError(f"invalid declared FA3 artifact: {path}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    fa3_loaded_files.append({
+        "module": f"artifact:{path.name}",
+        "path": str(path),
+        "sha256": digest,
+    })
+    covered_fa3_paths.add(str(path))
+fa3_loaded_files.sort(key=lambda item: (item["path"], item["module"]))
 revision_candidates = set()
-for candidate_path in [fa3_origin, *(item["path"] for item in fa3_loaded_files)]:
+for candidate_path in [
+    fa3_origin,
+    *getattr(fa3_interface, "__fa3_artifact_files__", ()),
+]:
     if candidate_path:
         revision_candidates.update(re.findall(r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])", candidate_path))
 declared_revision = getattr(fa3_interface, "__revision__", None)

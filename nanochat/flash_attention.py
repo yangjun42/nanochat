@@ -13,6 +13,7 @@ Usage (drop-in replacement for FA3):
     # Inference (with KV cache)
     y = flash_attn.flash_attn_with_kvcache(q, k_cache, v_cache, k=k, v=v, ...)
 """
+import os
 import torch
 import torch.nn.functional as F
 
@@ -24,16 +25,81 @@ def _load_flash_attention_3():
     """Try to load Flash Attention 3 (requires Hopper GPU, sm90)."""
     if not torch.cuda.is_available():
         return None
+    local_dir = os.environ.get("NANOCHAT_FA3_LOCAL_DIR")
     try:
         major, _ = torch.cuda.get_device_capability()
         # FA3 kernels are compiled for Hopper (sm90) only
         # Ada (sm89), Blackwell (sm100) need SDPA fallback until FA3 is recompiled
         if major != 9:
             return None
-        import os
+        import importlib
+        from pathlib import Path
+        import sys
+
         os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-        from kernels import get_kernel
         revision = os.environ.get("NANOCHAT_FA3_REVISION")
+
+        # A content-addressed local variant is the preferred formal path. It
+        # avoids the authenticated HF kernels API and remains usable offline.
+        # The environment lock later binds the resolved revision and hashes
+        # every loaded .py/.so file.
+        if local_dir:
+            root = Path(local_dir).expanduser().resolve(strict=True)
+            if not revision or revision not in root.parts:
+                raise RuntimeError(
+                    "NANOCHAT_FA3_LOCAL_DIR must be nested below the pinned revision"
+                )
+            path_entry = str(root)
+            sys.path.insert(0, path_entry)
+            try:
+                packaged_interface = (
+                    root / "flash_attention_3" / "flash_attn_interface.py"
+                )
+                source_build_interface = root / "flash_attn_interface.py"
+                if packaged_interface.is_file():
+                    module_name = "flash_attention_3.flash_attn_interface"
+                elif source_build_interface.is_file() and (
+                    root / "flash_attn_3"
+                ).is_dir():
+                    module_name = "flash_attn_interface"
+                else:
+                    raise RuntimeError(
+                        "NANOCHAT_FA3_LOCAL_DIR has no supported FA3 interface layout"
+                    )
+                interface = importlib.import_module(module_name)
+                if module_name == "flash_attn_interface":
+                    # The native wheel imports its generated top-level config
+                    # lazily from round_up_headdim(), after this loader returns.
+                    # Load it while the isolated artifact root is still visible.
+                    supporting_modules = [
+                        importlib.import_module("flash_attn_config"),
+                        importlib.import_module("flash_attn_3._C"),
+                    ]
+                else:
+                    supporting_modules = [
+                        importlib.import_module("flash_attention_3.flash_attn_config"),
+                        importlib.import_module("flash_attention_3._C"),
+                    ]
+                for module in [interface, *supporting_modules]:
+                    module_origin = Path(module.__file__).resolve(strict=True)
+                    module_origin.relative_to(root)
+            finally:
+                if path_entry in sys.path:
+                    sys.path.remove(path_entry)
+            origin = Path(interface.__file__).resolve(strict=True)
+            origin.relative_to(root)
+            artifact_files = []
+            for path in sorted(root.rglob("*")):
+                if path.is_symlink():
+                    raise RuntimeError(f"FA3 local package contains a symlink: {path}")
+                if path.is_file() and path.suffix in {".py", ".so"}:
+                    artifact_files.append(str(path.resolve(strict=True)))
+            if not artifact_files or str(origin) not in artifact_files:
+                raise RuntimeError("FA3 local package has no hashable interface artifact")
+            interface.__fa3_artifact_files__ = tuple(artifact_files)
+            return interface
+
+        from kernels import get_kernel
         kwargs = {"revision": revision} if revision else {}
         # kernels>=0.14 requires an explicit trust decision for community
         # repositories. Formal runs additionally require a full pinned Git
@@ -45,6 +111,10 @@ def _load_flash_attention_3():
             **kwargs,
         ).flash_attn_interface
     except Exception:
+        # An explicit formal local artifact is a contract, not a preference.
+        # Missing, mismatched, or unloadable files must not silently select SDPA.
+        if local_dir:
+            raise
         return None
 
 

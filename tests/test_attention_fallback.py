@@ -38,6 +38,7 @@ def test_fa3_loader_explicitly_trusts_only_the_pinned_repository(monkeypatch):
 
     fake_kernels.get_kernel = fake_get_kernel
     monkeypatch.setitem(sys.modules, "kernels", fake_kernels)
+    monkeypatch.delenv("NANOCHAT_FA3_LOCAL_DIR", raising=False)
     monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
     monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
     monkeypatch.setattr(
@@ -50,6 +51,124 @@ def test_fa3_loader_explicitly_trusts_only_the_pinned_repository(monkeypatch):
         "revision": revision,
         "trust_remote_code": True,
     }
+
+
+def test_fa3_loader_prefers_content_addressed_local_variant(monkeypatch, tmp_path):
+    revision = "b" * 40
+    variant = tmp_path / revision / "torch210-cu130-aarch64"
+    package = variant / "flash_attention_3"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "flash_attn_interface.py").write_text(
+        "LOCAL_VARIANT = True\n", encoding="utf-8"
+    )
+    (package / "flash_attn_config.py").write_text("CONFIG = {}\n", encoding="utf-8")
+    (package / "_C.py").write_text("REGISTERED = True\n", encoding="utf-8")
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
+    monkeypatch.setenv("NANOCHAT_FA3_LOCAL_DIR", str(variant))
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        fa_module.torch.cuda, "get_device_capability", lambda: (9, 0)
+    )
+    for name in ("flash_attention_3.flash_attn_interface", "flash_attention_3"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+
+    interface = fa_module._load_flash_attention_3()
+
+    assert interface is not None
+    assert interface.LOCAL_VARIANT is True
+    assert str(variant.resolve()) in str(interface.__file__)
+    assert set(interface.__fa3_artifact_files__) == {
+        str((package / "__init__.py").resolve()),
+        str((package / "_C.py").resolve()),
+        str((package / "flash_attn_config.py").resolve()),
+        str((package / "flash_attn_interface.py").resolve()),
+    }
+
+
+def test_explicit_local_fa3_failure_is_not_silently_downgraded(monkeypatch, tmp_path):
+    revision = "c" * 40
+    variant = tmp_path / revision / "missing-variant"
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
+    monkeypatch.setenv("NANOCHAT_FA3_LOCAL_DIR", str(variant))
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        fa_module.torch.cuda, "get_device_capability", lambda: (9, 0)
+    )
+
+    with pytest.raises(FileNotFoundError):
+        fa_module._load_flash_attention_3()
+
+
+def test_fa3_loader_supports_pinned_source_build_wheel_layout(monkeypatch, tmp_path):
+    revision = "d" * 40
+    root = tmp_path / revision / "torch210-cu130-aarch64-hdim64"
+    extension_package = root / "flash_attn_3"
+    extension_package.mkdir(parents=True)
+    (extension_package / "__init__.py").write_text("", encoding="utf-8")
+    (extension_package / "_C.py").write_text("REGISTERED = True\n", encoding="utf-8")
+    (root / "flash_attn_config.py").write_text("CONFIG = {}\n", encoding="utf-8")
+    (root / "flash_attn_interface.py").write_text(
+        "from flash_attn_3 import _C\nLOCAL_SOURCE_BUILD = _C.REGISTERED\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
+    monkeypatch.setenv("NANOCHAT_FA3_LOCAL_DIR", str(root))
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        fa_module.torch.cuda, "get_device_capability", lambda: (9, 0)
+    )
+    for name in (
+        "flash_attn_interface",
+        "flash_attn_config",
+        "flash_attn_3._C",
+        "flash_attn_3",
+    ):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+
+    interface = fa_module._load_flash_attention_3()
+
+    assert interface.LOCAL_SOURCE_BUILD is True
+    assert "flash_attn_config" in sys.modules
+    assert str(root.resolve()) in str(interface.__file__)
+    assert set(interface.__fa3_artifact_files__) == {
+        str((root / "flash_attn_interface.py").resolve()),
+        str((root / "flash_attn_config.py").resolve()),
+        str((extension_package / "__init__.py").resolve()),
+        str((extension_package / "_C.py").resolve()),
+    }
+
+
+def test_source_build_rejects_cached_support_module_outside_artifact(
+    monkeypatch, tmp_path
+):
+    revision = "e" * 40
+    root = tmp_path / revision / "formal-artifact"
+    extension_package = root / "flash_attn_3"
+    extension_package.mkdir(parents=True)
+    (extension_package / "__init__.py").write_text("", encoding="utf-8")
+    (extension_package / "_C.py").write_text("REGISTERED = True\n", encoding="utf-8")
+    (root / "flash_attn_config.py").write_text("CONFIG = {}\n", encoding="utf-8")
+    (root / "flash_attn_interface.py").write_text(
+        "from flash_attn_3 import _C\n", encoding="utf-8"
+    )
+    outside = tmp_path / "outside" / "flash_attn_config.py"
+    outside.parent.mkdir()
+    outside.write_text("CONFIG = {'poisoned': True}\n", encoding="utf-8")
+    poisoned = types.ModuleType("flash_attn_config")
+    poisoned.__file__ = str(outside)
+    monkeypatch.setitem(sys.modules, "flash_attn_config", poisoned)
+    for name in ("flash_attn_interface", "flash_attn_3._C", "flash_attn_3"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
+    monkeypatch.setenv("NANOCHAT_FA3_LOCAL_DIR", str(root))
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        fa_module.torch.cuda, "get_device_capability", lambda: (9, 0)
+    )
+
+    with pytest.raises(ValueError):
+        fa_module._load_flash_attention_3()
 
 
 def set_impl(impl):
