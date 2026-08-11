@@ -991,14 +991,20 @@ def probe_environment(
     python_executable: str, *, checkout: Path | None = None
 ) -> dict[str, Any]:
     resolved = shutil.which(python_executable) or python_executable
-    executable_path = Path(resolved).expanduser().resolve()
+    # Preserve the launcher path for execution.  In a virtual environment the
+    # launcher is commonly a symlink to the base interpreter; resolving it
+    # before subprocess execution bypasses pyvenv.cfg and therefore the venv's
+    # site-packages.  Keep hashing the resolved interpreter target so the
+    # existing environment-lock field retains its original meaning.
+    launcher_path = Path(os.path.abspath(str(Path(resolved).expanduser())))
+    executable_path = launcher_path.resolve()
     if not executable_path.is_file():
         raise ContractError(f"NANOCHAT_PYTHON is not a file: {executable_path}")
     probe_environment = dict(os.environ)
     probe_environment.pop("PYTHONPATH", None)
     probe_environment["PYTHONNOUSERSITE"] = "1"
     result = subprocess.run(
-        [str(executable_path), "-c", ENVIRONMENT_PROBE],
+        [str(launcher_path), "-c", ENVIRONMENT_PROBE],
         capture_output=True,
         text=True,
         cwd=str(checkout.resolve()) if checkout is not None else None,

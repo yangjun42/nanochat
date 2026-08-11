@@ -14,6 +14,7 @@ from csc_fast_scaling_law.data_preflight import verify_data
 from csc_fast_scaling_law.nanochat_task_runner import (
     _parse_eval_bpb,
     build_commands,
+    probe_environment,
     stage_tokenizer,
     validate_checkpoint_contract,
     validate_data_capacity_receipt,
@@ -22,6 +23,30 @@ from csc_fast_scaling_law.nanochat_task_runner import (
     validate_schedule_manifest,
     validate_text_overlap_audit,
 )
+
+
+def test_environment_probe_preserves_symlink_venv_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_python = tmp_path / "base-python"
+    base_python.write_text(
+        "#!/bin/sh\n"
+        'test "$0" = "$EXPECTED_PYTHON_LAUNCHER" || exit 97\n'
+        "printf '%s\\n' '{\"launcher_preserved\": true}'\n",
+        encoding="utf-8",
+    )
+    base_python.chmod(0o755)
+    launcher = tmp_path / "campaign-venv" / "bin" / "python"
+    launcher.parent.mkdir(parents=True)
+    launcher.symlink_to(base_python)
+    monkeypatch.setenv("EXPECTED_PYTHON_LAUNCHER", str(launcher))
+
+    observed = probe_environment(str(launcher))
+
+    assert observed["launcher_preserved"] is True
+    assert observed["python_executable_sha256"] == hashlib.sha256(
+        base_python.read_bytes()
+    ).hexdigest()
 
 
 def _prepared(tmp_path: Path) -> dict[str, object]:
