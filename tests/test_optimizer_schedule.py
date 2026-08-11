@@ -7,6 +7,8 @@ import pytest
 from nanochat.optimizer_schedule import (
     learning_rate_multiplier,
     muon_momentum,
+    schedule_warmdown_steps,
+    validate_schedule_geometry,
     weight_decay_multiplier,
 )
 
@@ -70,14 +72,99 @@ def test_realized_self_similar_lr_and_weight_decay_are_finite(
             warmup_steps=warmup_steps,
             warmdown_ratio=0.65,
             final_lr_fraction=0.05,
+            schedule_version="exact_last_update_v1",
         )
-        for step in (0, warmup_steps - 1, num_iterations - 1, num_iterations)
+        for step in (0, warmup_steps - 1, num_iterations - 1)
     ]
     wd_values = [
-        weight_decay_multiplier(step, num_iterations=num_iterations)
-        for step in (0, num_iterations // 2, num_iterations)
+        weight_decay_multiplier(
+            step,
+            num_iterations=num_iterations,
+            schedule_version="exact_last_update_v1",
+        )
+        for step in (0, (num_iterations - 1) // 2, num_iterations - 1)
     ]
     assert all(math.isfinite(value) for value in lr_values + wd_values)
     assert lr_values[0] > 0.0
     assert lr_values[-1] == pytest.approx(0.05)
     assert wd_values == pytest.approx([1.0, 0.5, 0.0], abs=0.006)
+
+
+@pytest.mark.parametrize("num_iterations", SOURCE_AND_TARGET_HORIZONS)
+def test_corrected_schedule_reaches_all_endpoints_on_last_real_update(
+    num_iterations: int,
+) -> None:
+    step = num_iterations - 1
+    assert learning_rate_multiplier(
+        step,
+        num_iterations=num_iterations,
+        warmup_steps=max(1, round(0.05 * num_iterations)),
+        warmdown_ratio=0.65,
+        final_lr_fraction=0.05,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.05)
+    assert muon_momentum(
+        step,
+        num_iterations=num_iterations,
+        warmup_steps=max(1, round(0.15 * num_iterations)),
+        warmdown_ratio=0.65,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.90)
+    assert weight_decay_multiplier(
+        step,
+        num_iterations=num_iterations,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.0)
+
+
+def test_legacy_and_corrected_endpoint_semantics_are_explicitly_distinct() -> None:
+    legacy_last = learning_rate_multiplier(
+        143,
+        num_iterations=144,
+        warmup_steps=5,
+        warmdown_ratio=0.65,
+        final_lr_fraction=0.05,
+        schedule_version="legacy_v0",
+    )
+    corrected_last = learning_rate_multiplier(
+        143,
+        num_iterations=144,
+        warmup_steps=5,
+        warmdown_ratio=0.65,
+        final_lr_fraction=0.05,
+        schedule_version="exact_last_update_v1",
+    )
+    assert legacy_last > corrected_last
+    assert corrected_last == pytest.approx(0.05)
+
+
+def test_warmdown_step_rounding_is_explicit_half_up() -> None:
+    assert schedule_warmdown_steps(0.65, 10) == 7
+    assert schedule_warmdown_steps(0.65, 9) == 6
+
+
+def test_exact_schedule_rejects_overlapping_warmup_and_degenerate_horizon() -> None:
+    with pytest.raises(ValueError, match="at least two"):
+        validate_schedule_geometry(
+            num_iterations=1,
+            warmup_steps=0,
+            muon_momentum_warmup_steps=0,
+            warmdown_ratio=0.65,
+            schedule_version="exact_last_update_v1",
+        )
+    with pytest.raises(ValueError, match="LR warmup overlaps"):
+        validate_schedule_geometry(
+            num_iterations=10,
+            warmup_steps=4,
+            muon_momentum_warmup_steps=3,
+            warmdown_ratio=0.65,
+            schedule_version="exact_last_update_v1",
+        )
+    with pytest.raises(ValueError, match="Muon warmup overlaps"):
+        validate_schedule_geometry(
+            num_iterations=10,
+            warmup_steps=3,
+            muon_momentum_warmup_steps=4,
+            warmdown_ratio=0.65,
+            schedule_version="exact_last_update_v1",
+        )

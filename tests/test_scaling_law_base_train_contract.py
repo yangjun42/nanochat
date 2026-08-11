@@ -6,16 +6,27 @@ from pathlib import Path
 def test_base_train_exposes_scaling_law_campaign_arguments_and_logs() -> None:
     source = (Path(__file__).resolve().parents[1] / "scripts" / "base_train.py").read_text(encoding="utf-8")
 
-    assert 'parser.add_argument("--seed"' in source
+    assert 'parser.add_argument("--init-seed"' in source
+    assert 'parser.add_argument("--data-seed"' in source
+    assert 'parser.add_argument("--dataset-manifest"' in source
+    assert 'parser.add_argument("--validation-manifest"' in source
+    assert 'parser.add_argument("--eval-tokens-per-shard"' in source
+    assert '"--save-optimizer"' in source
+    assert "argparse.BooleanOptionalAction" in source
     assert 'parser.add_argument("--target-tokens"' in source
     assert 'parser.add_argument("--muon-momentum-warmup-steps"' in source
     assert 'parser.add_argument("--weight-decay-horizon-tokens"' in source
-    assert "torch.manual_seed(args.seed)" in source
+    assert '"--optimizer-schedule-version"' in source
+    assert "torch.manual_seed(args.init_seed)" in source
     assert "Number of scaling parameters" in source
     assert "Target training tokens" in source
     assert "Horizon source" in source
     assert "D_actual" in source
+    assert "Prediction positions completed" in source
+    assert "optimizer.state_dict() if args.save_optimizer else None" in source
+    assert '"resume_mode": "optimizer_state_only" if args.save_optimizer else "restart_only"' in source
     assert "weight_decay_horizon_tokens" in source
+    assert "schedule_version=args.optimizer_schedule_version" in source
     assert "current_muon_momentum = get_muon_momentum(step)" in source
     assert "\n    muon_momentum = get_muon_momentum(step)" not in source
 

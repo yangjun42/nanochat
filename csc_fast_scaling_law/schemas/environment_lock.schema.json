@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/environment_lock.schema.json",
+  "title": "Nanochat observed environment lock",
+  "type": "object",
+  "required": ["schema_version", "expected", "lockfiles"],
+  "properties": {
+    "schema_version": {"const": "nanochat-environment-v1"},
+    "expected": {
+      "type": "object",
+      "required": [
+        "python_version",
+        "python_implementation",
+        "python_executable_sha256",
+        "torch_version",
+        "torch_cuda_version",
+        "pyarrow_version",
+        "rustbpe_version",
+        "tokenizers_version",
+        "tiktoken_version",
+        "torchao_version",
+        "kernels_version",
+        "fa3_interface_origin",
+        "fa3_loaded_files",
+        "fa3_requested_revision",
+        "fa3_resolved_revision",
+        "attention_backend",
+        "flash_attention_3_available",
+        "compute_dtype",
+        "cuda_available",
+        "cuda_device_names_unique",
+        "cuda_capabilities_unique",
+        "nccl_version",
+        "cudnn_version"
+      ],
+      "properties": {
+        "python_version": {"type": "string"},
+        "python_implementation": {"type": "string"},
+        "python_executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "torch_version": {"type": "string"},
+        "torch_cuda_version": {"type": "string"},
+        "pyarrow_version": {"type": "string"},
+        "rustbpe_version": {"type": "string"},
+        "tokenizers_version": {"type": "string"},
+        "tiktoken_version": {"type": "string"},
+        "torchao_version": {"type": ["string", "null"]},
+        "kernels_version": {"type": "string"},
+        "fa3_interface_origin": {"type": "string", "minLength": 1},
+        "fa3_loaded_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["module", "path", "sha256"],
+            "properties": {
+              "module": {"type": "string", "minLength": 1},
+              "path": {"type": "string", "minLength": 1},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "fa3_requested_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "fa3_resolved_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "attention_backend": {"enum": ["fa3", "sdpa"]},
+        "flash_attention_3_available": {"type": "boolean"},
+        "compute_dtype": {"enum": ["bfloat16", "float16", "float32"]},
+        "cuda_available": {"const": true},
+        "cuda_device_names_unique": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cuda_capabilities_unique": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "prefixItems": [{"type": "integer"}, {"type": "integer"}],
+            "items": false
+          }
+        },
+        "nccl_version": {},
+        "cudnn_version": {"type": ["integer", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "lockfiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

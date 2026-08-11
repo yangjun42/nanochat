@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/tokenizer_manifest.schema.json",
+  "title": "Nanochat tokenizer manifest",
+  "type": "object",
+  "required": ["schema_version", "tokenizer_id", "files"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "tokenizer_id": {"type": "string", "minLength": 1},
+    "files": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "allOf": [
+        {"contains": {"type": "object", "properties": {"name": {"const": "tokenizer.pkl"}}, "required": ["name"]}},
+        {"contains": {"type": "object", "properties": {"name": {"const": "token_bytes.pt"}}, "required": ["name"]}}
+      ],
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "sha256"],
+        "properties": {
+          "name": {"enum": ["tokenizer.pkl", "token_bytes.pt"]},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

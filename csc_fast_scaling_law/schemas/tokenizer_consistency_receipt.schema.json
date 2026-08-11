@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/tokenizer_consistency_receipt.schema.json",
+  "title": "Nanochat tokenizer byte-length consistency receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "algorithm",
+    "code_commit",
+    "tokenizer_manifest_sha256",
+    "tokenizer_pickle_sha256",
+    "token_bytes_sha256",
+    "vocab_size",
+    "special_token_ids",
+    "engine"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat-tokenizer-consistency-v1"},
+    "status": {"const": "verified"},
+    "algorithm": {"const": "tiktoken_raw_token_bytes_v1"},
+    "code_commit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "tokenizer_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "tokenizer_pickle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "token_bytes_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "vocab_size": {"type": "integer", "minimum": 1},
+    "special_token_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0},
+      "uniqueItems": true
+    },
+    "engine": {
+      "type": "object",
+      "required": ["rustbpe_version", "tiktoken_version", "tokenizers_version", "torch_version"],
+      "properties": {
+        "rustbpe_version": {"type": ["string", "null"]},
+        "tiktoken_version": {"type": ["string", "null"]},
+        "tokenizers_version": {"type": ["string", "null"]},
+        "torch_version": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

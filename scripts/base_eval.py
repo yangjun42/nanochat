@@ -38,6 +38,7 @@ from nanochat.core_eval import evaluate_task
 from nanochat.dataloader import tokenizing_distributed_data_loader_bos_bestfit
 from nanochat.loss_eval import evaluate_bpb
 from nanochat.engine import Engine
+from nanochat.dataset import load_parquet_manifest, validate_manifest_separation
 
 # -----------------------------------------------------------------------------
 # HuggingFace loading utilities
@@ -205,6 +206,64 @@ def make_bpb_eval_plan(raw_splits: str, val_row_group_starts: list[int]) -> list
     return plan
 
 
+def make_manifest_bpb_eval_plan(
+    raw_splits: str,
+    validation_names: list[str],
+) -> list[tuple[str, str | None, str]]:
+    """Plan independent heldout-file evaluations in manifest order."""
+
+    splits = [part.strip() for part in str(raw_splits).split(",") if part.strip()]
+    if not splits:
+        splits = ["train", "val"]
+    invalid = sorted(set(splits) - {"train", "val"})
+    if invalid:
+        raise ValueError(f"invalid BPB splits: {invalid}")
+    plan: list[tuple[str, str | None, str]] = []
+    for split_name in splits:
+        if split_name == "train":
+            plan.append(("train", None, "train"))
+        else:
+            plan.extend(
+                ("val", validation_name, f"val/{validation_name}")
+                for validation_name in validation_names
+            )
+    return plan
+
+
+def validate_runtime_contract(
+    *,
+    required_attention_backend: str,
+    required_compute_dtype: str,
+    use_fa3: bool,
+    compute_dtype: torch.dtype,
+) -> dict[str, str]:
+    """Return the observed eval runtime or fail closed on a contract mismatch."""
+
+    observed = {
+        "attention_backend": "fa3" if use_fa3 else "sdpa",
+        "compute_dtype": str(compute_dtype).removeprefix("torch."),
+    }
+    if (
+        required_attention_backend != "auto"
+        and observed["attention_backend"] != required_attention_backend
+    ):
+        raise RuntimeError(
+            "evaluation attention backend contract violated: "
+            f"required={required_attention_backend}, "
+            f"observed={observed['attention_backend']}"
+        )
+    if (
+        required_compute_dtype != "auto"
+        and observed["compute_dtype"] != required_compute_dtype
+    ):
+        raise RuntimeError(
+            "evaluation compute dtype contract violated: "
+            f"required={required_compute_dtype}, "
+            f"observed={observed['compute_dtype']}"
+        )
+    return observed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Base model evaluation")
     parser.add_argument('--eval', type=str, default='core,bpb,sample', help='Comma-separated evaluations to run: core,bpb,sample (default: all)')
@@ -214,10 +273,45 @@ def main():
     parser.add_argument('--max-per-task', type=int, default=-1, help='Max examples per CORE task (-1 = all)')
     parser.add_argument('--device-batch-size', type=int, default=32, help='Per-device batch size for BPB evaluation')
     parser.add_argument('--split-tokens', type=int, default=40*524288, help='Number of tokens to evaluate per split for BPB')
+    parser.add_argument('--eval-tokens-per-shard', type=int, default=-1, help='Prediction positions evaluated on each independent manifest shard (-1 = use --split-tokens)')
     parser.add_argument('--bpb-splits', type=str, default='train,val', help='Comma-separated BPB splits to evaluate: train,val')
     parser.add_argument('--bpb-val-row-group-starts', type=str, default='0', help='Comma-separated validation row-group starts for BPB shard/noise diagnostics')
+    parser.add_argument('--dataset-manifest', type=str, default=None, help='JSON manifest declaring training parquet shards')
+    parser.add_argument('--validation-manifest', type=str, default=None, help='JSON manifest declaring independent heldout parquet shards')
+    parser.add_argument('--data-seed', type=int, default=None, help='Seed for deterministic global train row-group shuffling')
+    parser.add_argument('--verify-shard-hashes', action='store_true', help='Verify every declared parquet SHA-256 before evaluation')
     parser.add_argument('--device-type', type=str, default='', help='cuda|cpu|mps (empty = autodetect)')
+    parser.add_argument('--require-attention-backend', choices=('auto', 'fa3', 'sdpa'), default='auto', help='fail if evaluation selects a different attention backend')
+    parser.add_argument('--require-compute-dtype', choices=('auto', 'bfloat16', 'float16', 'float32'), default='auto', help='fail if evaluation compute precision differs from the contract')
     args = parser.parse_args()
+
+    using_manifests = args.dataset_manifest is not None or args.validation_manifest is not None
+    if using_manifests and not (args.dataset_manifest and args.validation_manifest):
+        parser.error('--dataset-manifest and --validation-manifest must be supplied together')
+    if using_manifests and args.data_seed is None:
+        parser.error('manifest-backed evaluation requires an explicit --data-seed')
+    if args.eval_tokens_per_shard == 0 or args.eval_tokens_per_shard < -1:
+        parser.error('--eval-tokens-per-shard must be -1 or positive')
+    dataset_provenance = None
+    validation_provenance = None
+    validation_names = []
+    if using_manifests:
+        train_manifest = load_parquet_manifest(
+            args.dataset_manifest,
+            expected_split='train',
+            verify_shard_hashes=args.verify_shard_hashes,
+            require_shard_hashes=True,
+        )
+        heldout_manifest = load_parquet_manifest(
+            args.validation_manifest,
+            expected_split='validation',
+            verify_shard_hashes=args.verify_shard_hashes,
+            require_shard_hashes=True,
+        )
+        validate_manifest_separation(train_manifest, heldout_manifest)
+        dataset_provenance = train_manifest.provenance()
+        validation_provenance = heldout_manifest.provenance()
+        validation_names = [shard.name for shard in heldout_manifest.shards]
 
     # Parse evaluation modes
     eval_modes = set(mode.strip() for mode in args.eval.split(','))
@@ -229,6 +323,18 @@ def main():
     # Distributed / precision setup
     device_type = autodetect_device_type() if args.device_type == '' else args.device_type
     ddp, ddp_rank, ddp_local_rank, ddp_world_size, device = compute_init(device_type)
+    # Evaluation is a separate process from training, so it must independently
+    # prove that the requested kernel and precision are actually active.
+    from nanochat.common import COMPUTE_DTYPE, COMPUTE_DTYPE_REASON
+    from nanochat.flash_attention import USE_FA3
+    runtime_contract = validate_runtime_contract(
+        required_attention_backend=args.require_attention_backend,
+        required_compute_dtype=args.require_compute_dtype,
+        use_fa3=USE_FA3,
+        compute_dtype=COMPUTE_DTYPE,
+    )
+    print0("EVAL_RUNTIME_CONTRACT: " + json.dumps(runtime_contract, sort_keys=True))
+    print0(f"Evaluation compute dtype reason: {COMPUTE_DTYPE_REASON}")
     # Load model and tokenizer
     is_hf_model = args.hf_path is not None
     if is_hf_model:
@@ -295,15 +401,31 @@ def main():
         print0("BPB Evaluation")
         print0("="*80)
         tokens_per_step = args.device_batch_size * sequence_len * ddp_world_size
-        if args.split_tokens % tokens_per_step != 0:
-            # Adjust to nearest multiple
-            args.split_tokens = (args.split_tokens // tokens_per_step) * tokens_per_step
-            print0(f"Adjusted split_tokens to {args.split_tokens} (must be divisible by {tokens_per_step})")
-        steps = args.split_tokens // tokens_per_step
+        positions_per_shard = (
+            args.eval_tokens_per_shard
+            if args.eval_tokens_per_shard > 0
+            else args.split_tokens
+        )
+        if positions_per_shard % tokens_per_step != 0:
+            parser.error(
+                'BPB prediction positions per shard must be exactly divisible by '
+                f'the distributed batch ({positions_per_shard:,} % {tokens_per_step:,} != 0)'
+            )
+        steps = positions_per_shard // tokens_per_step
+        if steps <= 0:
+            parser.error('BPB evaluation requires at least one step per shard')
 
-        eval_plan = make_bpb_eval_plan(args.bpb_splits, parse_bpb_val_row_group_starts(args.bpb_val_row_group_starts))
+        if using_manifests:
+            eval_plan = make_manifest_bpb_eval_plan(args.bpb_splits, validation_names)
+        else:
+            eval_plan = make_bpb_eval_plan(
+                args.bpb_splits,
+                parse_bpb_val_row_group_starts(args.bpb_val_row_group_starts),
+            )
         val_shard_values = []
-        for split_name, row_group_start, result_key in eval_plan:
+        for split_name, shard_cursor, result_key in eval_plan:
+            row_group_start = 0 if using_manifests else int(shard_cursor)
+            validation_shard = shard_cursor if using_manifests and split_name == 'val' else None
             loader = tokenizing_distributed_data_loader_bos_bestfit(
                 tokenizer,
                 args.device_batch_size,
@@ -311,6 +433,10 @@ def main():
                 split_name,
                 device=device,
                 row_group_start=row_group_start,
+                dataset_manifest=args.dataset_manifest,
+                validation_manifest=args.validation_manifest,
+                data_seed=args.data_seed,
+                validation_shard=validation_shard,
             )
             bpb = evaluate_bpb(model, loader, steps, token_bytes)
             bpb_results[result_key] = bpb
@@ -345,7 +471,7 @@ def main():
 
     # --- Log to report ---
     from nanochat.report import get_report
-    report_data = [{"model": model_name}]
+    report_data = [{"model": model_name, "runtime contract": runtime_contract}]
 
     if core_results:
         report_data[0]["CORE metric"] = core_results["core_metric"]
@@ -354,6 +480,14 @@ def main():
     if bpb_results:
         report_data[0]["train bpb"] = bpb_results.get("train")
         report_data[0]["val bpb"] = bpb_results.get("val")
+        report_data[0]["prediction positions per shard"] = (
+            args.eval_tokens_per_shard
+            if args.eval_tokens_per_shard > 0
+            else args.split_tokens
+        )
+        report_data[0]["dataset manifest"] = dataset_provenance
+        report_data[0]["validation manifest"] = validation_provenance
+        report_data.append({"bpb by split/shard": bpb_results})
 
     if samples:
         report_data.append({f"sample {i}": s for i, s in enumerate(samples)})

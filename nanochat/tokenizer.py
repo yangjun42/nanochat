@@ -263,6 +263,29 @@ class RustBPETokenizer:
             pickle.dump(self.enc, f)
         print(f"Saved tokenizer encoding to {pickle_path}")
 
+    def token_byte_lengths(self, device="cpu"):
+        """Return exact raw-byte lengths for every token ID.
+
+        ``tiktoken.decode([id])`` returns text and replaces an isolated invalid
+        UTF-8 byte with U+FFFD.  Re-encoding that text therefore over-counts a
+        one-byte token as three bytes.  BPB denominators must instead use the
+        encoding's raw token bytes.  Special tokens delimit documents and are
+        deliberately assigned length zero.
+        """
+
+        import torch
+
+        special_ids = {
+            self.encode_special(token) for token in self.get_special_tokens()
+        }
+        lengths = [
+            0
+            if token_id in special_ids
+            else len(self.enc.decode_single_token_bytes(token_id))
+            for token_id in range(self.get_vocab_size())
+        ]
+        return torch.tensor(lengths, dtype=torch.int32, device=device)
+
     def render_conversation(self, conversation, max_tokens=2048):
         """
         Tokenize a single Chat conversation (which we call a "doc" or "document" here).

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/schedule_manifest.schema.json",
+  "title": "Nanochat per-task schedule manifest",
+  "type": "object",
+  "required": ["schema_version", "schedules"],
+  "properties": {
+    "schema_version": {"const": "nanochat-schedule-manifest-v1"},
+    "description": {"type": "string"},
+    "schedules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/schedule"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "schedule": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "schedule_id",
+        "target_tokens",
+        "total_batch_size",
+        "warmup_steps",
+        "muon_momentum_warmup_steps",
+        "weight_decay_horizon_tokens",
+        "warmdown_ratio",
+        "final_lr_frac",
+        "embedding_lr",
+        "unembedding_lr",
+        "weight_decay",
+        "matrix_lr",
+        "scalar_lr",
+        "target_param_data_ratio",
+        "reference_param_data_ratio",
+        "optimizer_schedule_version",
+        "attention_backend",
+        "compute_dtype",
+        "known_schedule_overlap"
+      ],
+      "properties": {
+        "task_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"},
+        "schedule_id": {"type": "string", "minLength": 1},
+        "target_tokens": {"type": "integer", "minimum": 1},
+        "total_batch_size": {"type": "integer", "minimum": 1},
+        "warmup_steps": {"type": "integer", "minimum": 0},
+        "muon_momentum_warmup_steps": {"type": "integer", "minimum": 0},
+        "weight_decay_horizon_tokens": {"type": "integer"},
+        "warmdown_ratio": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "final_lr_frac": {"type": "number", "minimum": 0, "maximum": 1},
+        "embedding_lr": {"type": "number", "minimum": 0},
+        "unembedding_lr": {"type": "number", "minimum": 0},
+        "weight_decay": {"type": "number", "minimum": 0},
+        "matrix_lr": {"type": "number", "minimum": 0},
+        "scalar_lr": {"type": "number", "minimum": 0},
+        "target_param_data_ratio": {"type": "number", "exclusiveMinimum": 0},
+        "reference_param_data_ratio": {"type": "number", "exclusiveMinimum": 0},
+        "optimizer_schedule_version": {"enum": ["legacy_v0", "exact_last_update_v1"]},
+        "attention_backend": {"const": "fa3"},
+        "compute_dtype": {"const": "bfloat16"},
+        "known_schedule_overlap": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

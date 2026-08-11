@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/campaign.schema.json",
+  "title": "Nanochat campaign contract",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "code",
+    "files",
+    "artifacts",
+    "reducer"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat-campaign-v1"},
+    "campaign_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "description": {"type": "string"},
+    "code": {
+      "type": "object",
+      "required": ["commit", "dirty"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "dirty": {"const": false},
+        "repository": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "object",
+      "required": [
+        "plan",
+        "plan_frozen",
+        "data_manifest",
+        "validation_manifest",
+        "tokenizer_manifest",
+        "tokenizer_consistency_receipt",
+        "environment_lock",
+        "schedule_manifest",
+        "decision_rules",
+        "data_preflight_receipt",
+        "text_overlap_audit",
+        "data_capacity_receipt"
+      ],
+      "additionalProperties": {"$ref": "#/$defs/fileRef"}
+    },
+    "required_plan_columns": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["required"],
+      "properties": {
+        "root": {"type": "string", "minLength": 1},
+        "required": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/artifactRequirement"}
+        },
+        "forbid_globs": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "reducer": {
+      "type": "object",
+      "required": ["metric_json", "required_fields"],
+      "properties": {
+        "metric_json": {"type": "string", "minLength": 1},
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "fileRef": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "additionalProperties": false
+    },
+    "artifactRequirement": {
+      "type": "object",
+      "required": ["name", "glob"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+        },
+        "glob": {"type": "string", "minLength": 1},
+        "min_count": {"type": "integer", "minimum": 0, "default": 1},
+        "max_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}
