@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/gpu_preflight_summary.schema.json",
+  "title": "nanochat 1/2/4-GPU preflight summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "preflight_only",
+    "formal_campaign_gpu_count",
+    "created_utc",
+    "manifest_sha256",
+    "overall_status",
+    "environment_contract",
+    "numerical_equivalence",
+    "throughput"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat_gpu_preflight_summary/v1"},
+    "preflight_only": {"const": true},
+    "formal_campaign_gpu_count": {"const": 4},
+    "created_utc": {"type": "string"},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "overall_status": {"enum": ["PASS", "FAIL"]},
+    "environment_contract": {
+      "type": "object",
+      "required": [
+        "environment_lock_sha256",
+        "runtime_bootstrap_sha256",
+        "formal_runtime_profile_sha256",
+        "orchestrator_validation_receipt_file_sha256",
+        "orchestrator_validation_receipt_semantic_sha256",
+        "worker_validation_receipt_sha256_by_world_size",
+        "status"
+      ],
+      "properties": {
+        "environment_lock_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "runtime_bootstrap_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "formal_runtime_profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "orchestrator_validation_receipt_file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "orchestrator_validation_receipt_semantic_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "worker_validation_receipt_sha256_by_world_size": {"type": "object"},
+        "status": {"const": "PASS"}
+      },
+      "additionalProperties": false
+    },
+    "numerical_equivalence": {
+      "type": "object",
+      "required": ["gate_role", "status", "tolerances", "comparisons"],
+      "properties": {
+        "gate_role": {"const": "required"},
+        "status": {"enum": ["PASS", "FAIL"]},
+        "tolerances": {"type": "object"},
+        "comparisons": {"type": "array", "minItems": 2, "maxItems": 2}
+      }
+    },
+    "throughput": {
+      "type": "object",
+      "required": ["gate_role", "status", "rows"],
+      "properties": {
+        "gate_role": {"const": "informational_only"},
+        "status": {"const": "MEASURED_NOT_GATED"},
+        "rows": {"type": "array", "minItems": 3, "maxItems": 3}
+      }
+    }
+  }
+}

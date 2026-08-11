@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/gpu_preflight_worker.schema.json",
+  "title": "nanochat single-world GPU preflight result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "preflight_only",
+    "formal_campaign_gpu_count",
+    "manifest_sha256",
+    "code_commit",
+    "world_size",
+    "environment_contract",
+    "runtime",
+    "input_contract",
+    "numerical",
+    "throughput",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat_gpu_preflight_worker/v1"},
+    "preflight_only": {"const": true},
+    "formal_campaign_gpu_count": {"const": 4},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "code_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "world_size": {"enum": [1, 2, 4]},
+    "environment_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environment_lock_sha256",
+        "runtime_bootstrap_sha256",
+        "formal_runtime_profile_sha256",
+        "validation_receipt_sha256",
+        "validation_receipt"
+      ],
+      "properties": {
+        "environment_lock_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "runtime_bootstrap_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "formal_runtime_profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "validation_receipt_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "validation_receipt": {"type": "object"}
+      }
+    },
+    "numerical": {
+      "type": "object",
+      "required": [
+        "losses",
+        "initial_parameter_sha256",
+        "final_parameter_sha256",
+        "parameter_delta_l2",
+        "parameter_delta_max_abs",
+        "rank_parameters_exactly_synchronized"
+      ],
+      "properties": {
+        "losses": {"type": "array", "items": {"type": "number"}, "minItems": 1},
+        "initial_parameter_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "final_parameter_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "parameter_delta_l2": {"type": "number", "minimum": 0},
+        "parameter_delta_max_abs": {"type": "number", "minimum": 0},
+        "rank_parameters_exactly_synchronized": {"const": true}
+      }
+    },
+    "throughput": {
+      "type": "object",
+      "required": ["gate_role", "median_prediction_tokens_per_second"],
+      "properties": {
+        "gate_role": {"const": "informational_only"},
+        "median_prediction_tokens_per_second": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "runtime": {"type": "object"},
+    "input_contract": {"type": "object"},
+    "artifacts": {"type": "object"}
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/gpu_preflight_runtime_profile.schema.json",
+  "title": "nanochat formal runtime profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "gpu_count",
+    "compute_dtype",
+    "attention_backend",
+    "compile_model",
+    "fp8_recipe"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat_formal_runtime_profile/v1"},
+    "gpu_count": {"const": 4},
+    "compute_dtype": {"enum": ["bfloat16", "float32"]},
+    "attention_backend": {"enum": ["fa3", "sdpa"]},
+    "compile_model": {"const": true},
+    "fp8_recipe": {"type": ["string", "null"], "enum": ["tensorwise", null]}
+  }
+}

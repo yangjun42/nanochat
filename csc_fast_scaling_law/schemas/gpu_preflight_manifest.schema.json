@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/nanochat/gpu_preflight_manifest.schema.json",
+  "title": "nanochat 1/2/4-GPU preflight manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "preflight_only",
+    "formal_campaign_gpu_count",
+    "world_sizes",
+    "code_commit",
+    "created_utc",
+    "init_seed",
+    "environment_lock",
+    "runtime_bootstrap",
+    "formal_runtime_profile",
+    "token_batches",
+    "model",
+    "optimizer",
+    "schedule",
+    "execution",
+    "runtime",
+    "tolerances"
+  ],
+  "properties": {
+    "schema_version": {"const": "nanochat_gpu_preflight/v1"},
+    "preflight_only": {"const": true},
+    "formal_campaign_gpu_count": {"const": 4},
+    "world_sizes": {
+      "type": "array",
+      "prefixItems": [{"const": 1}, {"const": 2}, {"const": 4}],
+      "items": false,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "code_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "created_utc": {"type": "string"},
+    "init_seed": {"type": "integer", "minimum": 0},
+    "environment_lock": {"$ref": "#/$defs/environmentLockArtifact"},
+    "runtime_bootstrap": {"$ref": "#/$defs/runtimeBootstrapArtifact"},
+    "formal_runtime_profile": {"$ref": "#/$defs/formalRuntimeProfileArtifact"},
+    "token_batches": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "file",
+        "sha256",
+        "source",
+        "num_updates",
+        "global_batch_sequences",
+        "sequence_length",
+        "vocab_size"
+      ],
+      "properties": {
+        "format": {"const": "nanochat_global_token_batches/v1"},
+        "file": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source": {"enum": ["synthetic_uniform", "provided_tensor"]},
+        "num_updates": {"type": "integer", "minimum": 1},
+        "global_batch_sequences": {"type": "integer", "minimum": 1},
+        "sequence_length": {"type": "integer", "minimum": 2},
+        "vocab_size": {"type": "integer", "minimum": 2}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence_len",
+        "vocab_size",
+        "n_layer",
+        "n_head",
+        "n_kv_head",
+        "n_embd",
+        "window_pattern"
+      ],
+      "properties": {
+        "sequence_len": {"type": "integer", "minimum": 2},
+        "vocab_size": {"type": "integer", "minimum": 2},
+        "n_layer": {"type": "integer", "minimum": 1},
+        "n_head": {"type": "integer", "minimum": 1},
+        "n_kv_head": {"type": "integer", "minimum": 1},
+        "n_embd": {"type": "integer", "minimum": 24},
+        "window_pattern": {"type": "string", "pattern": "^[SLsl]+$"}
+      }
+    },
+    "optimizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unembedding_lr",
+        "embedding_lr",
+        "matrix_lr",
+        "scalar_lr",
+        "weight_decay"
+      ],
+      "properties": {
+        "unembedding_lr": {"type": "number", "minimum": 0},
+        "embedding_lr": {"type": "number", "minimum": 0},
+        "matrix_lr": {"type": "number", "minimum": 0},
+        "scalar_lr": {"type": "number", "minimum": 0},
+        "weight_decay": {"type": "number", "minimum": 0}
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "num_updates",
+        "warmup_steps",
+        "muon_momentum_warmup_steps",
+        "warmdown_ratio",
+        "final_lr_fraction",
+        "schedule_version"
+      ],
+      "properties": {
+        "num_updates": {"type": "integer", "minimum": 1},
+        "warmup_steps": {"type": "integer", "minimum": 0},
+        "muon_momentum_warmup_steps": {"type": "integer", "minimum": 0},
+        "warmdown_ratio": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "final_lr_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "schedule_version": {"enum": ["legacy_v0", "exact_last_update_v1"]}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device_batch_sequences", "timing_warmup_updates"],
+      "properties": {
+        "device_batch_sequences": {"type": "integer", "minimum": 1},
+        "timing_warmup_updates": {"type": "integer", "minimum": 0}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compute_dtype", "attention_backend", "compile_model", "fp8_recipe"],
+      "properties": {
+        "compute_dtype": {"enum": ["bfloat16", "float32"]},
+        "attention_backend": {"enum": ["fa3", "sdpa"]},
+        "compile_model": {"const": true},
+        "fp8_recipe": {"type": ["string", "null"], "enum": ["tensorwise", null]}
+      }
+    },
+    "tolerances": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loss_atol", "loss_rtol", "parameter_max_abs", "parameter_relative_l2"],
+      "properties": {
+        "loss_atol": {"const": 0},
+        "loss_rtol": {"const": 0},
+        "parameter_max_abs": {"const": 0},
+        "parameter_relative_l2": {"const": 0}
+      }
+    }
+  },
+  "$defs": {
+    "environmentLockArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"const": "environment_lock.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "runtimeBootstrapArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"const": "runtime_bootstrap.sh"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "formalRuntimeProfileArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"const": "formal_runtime_profile.json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
