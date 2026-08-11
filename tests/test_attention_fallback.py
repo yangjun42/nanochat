@@ -13,11 +13,43 @@ Note on test structure:
     2. TestSDPAOnly: Tests that only exercise the SDPA fallback path. These can run
        on any device (CUDA, CPU, MPS) with the appropriate dtype for that device.
 """
+import sys
+import types
+
 import torch
 import pytest
 import nanochat.flash_attention as fa_module
 from nanochat.flash_attention import flash_attn, HAS_FA3
 from nanochat.engine import KVCache
+
+
+def test_fa3_loader_explicitly_trusts_only_the_pinned_repository(monkeypatch):
+    """kernels>=0.14 requires trust_remote_code for community kernels."""
+
+    revision = "a" * 40
+    observed = {}
+    interface = object()
+    fake_kernels = types.ModuleType("kernels")
+
+    def fake_get_kernel(repo_id, **kwargs):
+        observed["repo_id"] = repo_id
+        observed.update(kwargs)
+        return types.SimpleNamespace(flash_attn_interface=interface)
+
+    fake_kernels.get_kernel = fake_get_kernel
+    monkeypatch.setitem(sys.modules, "kernels", fake_kernels)
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", revision)
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        fa_module.torch.cuda, "get_device_capability", lambda: (9, 0)
+    )
+
+    assert fa_module._load_flash_attention_3() is interface
+    assert observed == {
+        "repo_id": "varunneal/flash-attention-3",
+        "revision": revision,
+        "trust_remote_code": True,
+    }
 
 
 def set_impl(impl):

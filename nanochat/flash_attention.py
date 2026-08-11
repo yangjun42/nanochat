@@ -35,8 +35,14 @@ def _load_flash_attention_3():
         from kernels import get_kernel
         revision = os.environ.get("NANOCHAT_FA3_REVISION")
         kwargs = {"revision": revision} if revision else {}
+        # kernels>=0.14 requires an explicit trust decision for community
+        # repositories. Formal runs additionally require a full pinned Git
+        # revision and bind the resolved revision plus every loaded file hash in
+        # the environment lock before training is allowed.
         return get_kernel(
-            'varunneal/flash-attention-3', **kwargs
+            'varunneal/flash-attention-3',
+            trust_remote_code=True,
+            **kwargs,
         ).flash_attn_interface
     except Exception:
         return None
