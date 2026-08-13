@@ -195,19 +195,11 @@ def _validate_row(row: Mapping[str, str]) -> None:
         )
     warmup_steps = _integer(row, "warmup_steps", minimum=0)
     muon_warmup_steps = _integer(row, "muon_momentum_warmup_steps", minimum=0)
-    horizon = _integer(row, "weight_decay_horizon_tokens", minimum=-1)
-    if horizon == 0:
-        raise ContractError("weight_decay_horizon_tokens may be -1 or positive")
-    n_scaling = _integer(row, "n_scaling", minimum=1)
-    if row["optimizer_schedule_version"] == "legacy_v0":
-        if horizon != 12 * n_scaling:
-            raise ContractError(
-                "legacy_v0 requires weight_decay_horizon_tokens=12*n_scaling"
-            )
-    elif horizon != target_tokens:
-        raise ContractError(
-            "exact_last_update_v1 requires weight_decay_horizon_tokens=target_tokens"
-        )
+    # The horizon is an explicit experimental variable. The frozen plan and
+    # checkpoint contract bind its exact value; the endpoint implementation
+    # does not need to infer it from the schedule version.
+    _integer(row, "weight_decay_horizon_tokens", minimum=1)
+    _integer(row, "n_scaling", minimum=1)
     warmdown_ratio = _number(row, "warmdown_ratio", minimum=0.0)
     if warmdown_ratio >= 1.0:
         raise ContractError("warmdown_ratio must be in [0, 1)")
@@ -216,11 +208,13 @@ def _validate_row(row: Mapping[str, str]) -> None:
         raise ContractError("final_lr_frac must be in [0, 1]")
     warmdown_steps = math.floor(num_iterations * warmdown_ratio + 0.5)
     warmdown_start = num_iterations - warmdown_steps
-    observed_overlap = warmup_steps > warmdown_start or muon_warmup_steps > warmdown_start
+    lr_overlap = warmup_steps > warmdown_start
+    muon_overlap = muon_warmup_steps > warmdown_start
+    observed_overlap = lr_overlap or muon_overlap
     if _boolean(row, "known_schedule_overlap") is not observed_overlap:
         raise ContractError("known_schedule_overlap does not match the schedule geometry")
-    if row["optimizer_schedule_version"] == "exact_last_update_v1" and observed_overlap:
-        raise ContractError("exact schedule warmup overlaps the warmdown interval")
+    if row["optimizer_schedule_version"] == "exact_last_update_v1" and lr_overlap:
+        raise ContractError("exact LR warmup overlaps the warmdown interval")
     for name in (
         "embedding_lr",
         "unembedding_lr",
@@ -1680,12 +1674,6 @@ def run_task(prepared_path: Path, *, python_executable: str | None = None) -> Pa
             f"training log N_scaling mismatch: expected {expected_n_scaling}, "
             f"observed {n_scaling!r}"
         )
-    horizon = _integer(row, "weight_decay_horizon_tokens")
-    if row["optimizer_schedule_version"] == "legacy_v0":
-        if horizon != 12 * int(float(n_scaling)):
-            raise ContractError("legacy weight-decay horizon does not match actual N_scaling")
-    elif horizon != target_tokens:
-        raise ContractError("exact weight-decay horizon does not match target_tokens")
     gpu_count = int(prepared["schedule"]["gpu_count"])
     metric = {
         "schema_version": RUNNER_SCHEMA_VERSION,

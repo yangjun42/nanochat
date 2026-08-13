@@ -26,7 +26,13 @@ def validate_schedule_geometry(
     warmdown_ratio: float,
     schedule_version: str,
 ) -> int:
-    """Reject exact schedules whose warmup masks their declared endpoint."""
+    """Validate LR geometry while preserving the historical Muon trajectory.
+
+    An exact LR warmup may not overlap warmdown because that would hide the
+    declared final learning-rate endpoint. Muon warmup keeps its historical
+    precedence over warmdown, which is useful for controlled schedule
+    ablations and is already the behavior implemented by :func:`muon_momentum`.
+    """
 
     if schedule_version not in SCHEDULE_VERSIONS:
         raise ValueError(f"unknown optimizer schedule version: {schedule_version}")
@@ -45,8 +51,6 @@ def validate_schedule_geometry(
         warmdown_start = num_iterations - warmdown_steps
         if warmup_steps > warmdown_start:
             raise ValueError("LR warmup overlaps the exact warmdown interval")
-        if muon_momentum_warmup_steps > warmdown_start:
-            raise ValueError("Muon warmup overlaps the exact warmdown interval")
     return warmdown_steps
 
 

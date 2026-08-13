@@ -143,7 +143,7 @@ def test_warmdown_step_rounding_is_explicit_half_up() -> None:
     assert schedule_warmdown_steps(0.65, 9) == 6
 
 
-def test_exact_schedule_rejects_overlapping_warmup_and_degenerate_horizon() -> None:
+def test_exact_schedule_rejects_lr_overlap_but_allows_historical_muon_overlap() -> None:
     with pytest.raises(ValueError, match="at least two"):
         validate_schedule_geometry(
             num_iterations=1,
@@ -160,11 +160,30 @@ def test_exact_schedule_rejects_overlapping_warmup_and_degenerate_horizon() -> N
             warmdown_ratio=0.65,
             schedule_version="exact_last_update_v1",
         )
-    with pytest.raises(ValueError, match="Muon warmup overlaps"):
-        validate_schedule_geometry(
-            num_iterations=10,
-            warmup_steps=3,
-            muon_momentum_warmup_steps=4,
-            warmdown_ratio=0.65,
-            schedule_version="exact_last_update_v1",
-        )
+    assert validate_schedule_geometry(
+        num_iterations=216,
+        warmup_steps=11,
+        muon_momentum_warmup_steps=400,
+        warmdown_ratio=0.65,
+        schedule_version="exact_last_update_v1",
+    ) == 140
+    assert muon_momentum(
+        215,
+        num_iterations=216,
+        warmup_steps=400,
+        warmdown_ratio=0.65,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.85 + (0.97 - 0.85) * 215 / 400)
+    assert learning_rate_multiplier(
+        215,
+        num_iterations=216,
+        warmup_steps=11,
+        warmdown_ratio=0.65,
+        final_lr_fraction=0.05,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.05)
+    assert weight_decay_multiplier(
+        215,
+        num_iterations=216,
+        schedule_version="exact_last_update_v1",
+    ) == pytest.approx(0.0)

@@ -224,19 +224,38 @@ def test_commands_reject_negative_reference_data_ratio(tmp_path: Path) -> None:
         build_commands(prepared, python_executable="/synthetic/python")
 
 
-def test_schedule_geometry_allows_declared_legacy_overlap_but_rejects_exact(
+def test_schedule_geometry_rejects_exact_lr_overlap_but_allows_declared_muon_overlap(
     tmp_path: Path,
 ) -> None:
     prepared = _prepared(tmp_path)
     row = prepared["plan_row"]  # type: ignore[assignment]
     row["warmup_steps"] = "4"
     row["known_schedule_overlap"] = "true"
-    with pytest.raises(ContractError, match="exact schedule warmup overlaps"):
+    with pytest.raises(ContractError, match="exact LR warmup overlaps"):
         build_commands(prepared, python_executable="/synthetic/python")
-    row["optimizer_schedule_version"] = "legacy_v0"
-    row["weight_decay_horizon_tokens"] = "12000"
+
+    row["warmup_steps"] = "2"
+    row["muon_momentum_warmup_steps"] = "400"
     train, _ = build_commands(prepared, python_executable="/synthetic/python")
-    assert "--optimizer-schedule-version=legacy_v0" in train
+    assert "--optimizer-schedule-version=exact_last_update_v1" in train
+    assert "--muon-momentum-warmup-steps=400" in train
+
+    row["known_schedule_overlap"] = "false"
+    with pytest.raises(ContractError, match="known_schedule_overlap"):
+        build_commands(prepared, python_executable="/synthetic/python")
+
+
+def test_explicit_weight_decay_horizon_is_independent_of_endpoint_version(
+    tmp_path: Path,
+) -> None:
+    prepared = _prepared(tmp_path)
+    row = prepared["plan_row"]  # type: ignore[assignment]
+    row["weight_decay_horizon_tokens"] = "12000"
+
+    train, _ = build_commands(prepared, python_executable="/synthetic/python")
+
+    assert "--optimizer-schedule-version=exact_last_update_v1" in train
+    assert "--weight-decay-horizon-tokens=12000" in train
 
 
 def test_schedule_manifest_exactly_binds_every_plan_task(tmp_path: Path) -> None:
@@ -613,6 +632,9 @@ def test_checkpoint_metadata_must_exactly_match_plan_and_data_contract(
 ) -> None:
     prepared = _prepared(tmp_path)
     row = prepared["plan_row"]  # type: ignore[assignment]
+    # A schedule-version-independent horizon remains bound exactly through the
+    # plan, command, and checkpoint metadata.
+    row["weight_decay_horizon_tokens"] = "12000"
     integer_fields = (
         "init_seed",
         "data_seed",
