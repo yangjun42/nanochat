@@ -7,6 +7,42 @@ nanochat is the simplest experimental harness for training LLMs. It is designed 
 
 For questions about the repo, I recommend either using [DeepWiki](https://deepwiki.com/karpathy/nanochat) from Devin/Cognition to ask questions about the repo, or use the [Discussions tab](https://github.com/karpathy/nanochat/discussions), or come by the [#nanochat](https://discord.com/channels/1020383067459821711/1427295580895314031) channel on Discord.
 
+## Runtime and artifacts
+
+- `.python-version`, `pyproject.toml`, and `uv.lock` are the local dependency
+  truth. Use locked uv operations and select exactly one of the `cpu` or `gpu`
+  extras. Do not reconstruct dependencies from an existing environment.
+- In this OneDrive checkout, uv's centralized-project-environments support
+  keeps the real environment in its machine-local cache. The repository may
+  contain one tiny, disposable `.venv` link or pointer to that cache; recreate
+  it from `uv.lock` on each machine rather than treating it as portable.
+- The standard CPU development check is:
+
+  ```bash
+  uv sync --locked --extra cpu --group dev
+  uv run --locked --extra cpu --group dev pytest -q -m "not slow"
+  ```
+
+- Datasets, checkpoints, raw logs, downloaded assets, and ordinary training
+  results are runtime state under `NANOCHAT_BASE_DIR` (by default
+  `~/.cache/nanochat`, and project scratch on Roihu), not OneDrive artifacts.
+  Local `wandb/`, Slurm output, test caches, and incomplete campaign attempts
+  are likewise scratch or rebuildable state.
+- Tracked run plans and campaign manifests under `csc_fast_scaling_law/` are
+  durable execution contracts, not generated results. Each training workflow
+  retains its own completion rule. In particular, contract campaigns require
+  hash-consistent `SUCCESS` and `artifact_manifest.json` records for every task
+  and a successful complete reduction; legacy Roihu runs require all planned
+  train/eval rows and their merged boundary files.
+- The Roihu publication boundary remains `metrics.csv`, `metrics.jsonl`, and
+  `fit_ready_cells.csv`, as documented in
+  [`csc_fast_scaling_law/README.md`](csc_fast_scaling_law/README.md). Publish
+  them only through the existing explicit sync into the scaling-law experiment
+  repository, where its curated manifest controls retention. Raw logs and
+  checkpoints stay on scratch unless a campaign-specific contract explicitly
+  designates another durable target. Never overwrite immutable, manifest-bound
+  campaign evidence.
+
 ## Time-to-GPT-2 Leaderboard
 
 Presently, the main focus of development is on tuning the pretraining stage, which takes the most amount of compute. Inspired by the modded-nanogpt repo and to incentivise progress and community collaboration, nanochat maintains a leaderboard for a "GPT-2 speedrun", which is the wall-clock time required to train a nanochat model to GPT-2 grade capability, as measured by the DCLM CORE score. The [runs/speedrun.sh](runs/speedrun.sh) script always reflects the reference way to train GPT-2 grade model and talk to it. The current leaderboard looks as follows:
@@ -32,15 +68,17 @@ See [dev/LEADERBOARD.md](dev/LEADERBOARD.md) for more docs on how to interpret a
 nanochat uses [uv](https://docs.astral.sh/uv/) for dependency management. To install:
 
 ```bash
-uv sync --extra gpu    # Use for CUDA (A100/H100/etc.)
-uv sync --extra cpu    # (or) Use for CPU-only / MPS
-source .venv/bin/activate
+uv sync --locked --extra gpu    # Use for CUDA (A100/H100/etc.)
+uv sync --locked --extra cpu    # (or) Use for CPU-only / MPS
 ```
+
+The two extras are alternatives. Run commands through `uv run --locked`
+instead of activating `.venv`.
 
 For development (adds pytest, matplotlib, ipykernel, transformers, etc.):
 
 ```bash
-uv sync --extra gpu --group dev
+uv sync --locked --extra gpu --group dev
 ```
 
 ### Reproduce and talk to GPT-2
@@ -51,10 +89,10 @@ The most fun you can have is to train your own GPT-2 and talk to it. The entire 
 bash runs/speedrun.sh
 ```
 
-You may wish to do so in a screen session as this will take ~3 hours to run. Once it's done, you can talk to it via the ChatGPT-like web UI. Make sure again that your local uv virtual environment is active (run `source .venv/bin/activate`), and serve it:
+You may wish to do so in a screen session as this will take ~3 hours to run. Once it's done, you can talk to it via the ChatGPT-like web UI. Serve it through the locked environment:
 
 ```bash
-python -m scripts.chat_web
+uv run --locked --extra gpu python -m scripts.chat_web
 ```
 
 And then visit the URL shown. Make sure to access it correctly, e.g. on Lambda use the public IP of the node you're on, followed by the port, so for example [http://209.20.xxx.xxx:8000/](http://209.20.xxx.xxx:8000/), etc. Then talk to your LLM as you'd normally talk to ChatGPT! Get it to write stories or poems. Ask it to tell you who you are to see a hallucination. Ask it why the sky is blue. Or why it's green. The speedrun is a 4e19 FLOPs capability model so it's a bit like talking to a kindergartener :).
@@ -77,7 +115,7 @@ A few more notes:
 If you are a researcher and wish to help improve nanochat, two scripts of interest are [runs/scaling_laws.sh](runs/scaling_laws.sh) and [runs/miniseries.sh](runs/miniseries.sh). See [Jan 7 miniseries v1](https://github.com/karpathy/nanochat/discussions/420) for related documentation. For quick experimentation (~5 min pretraining runs) my favorite scale is to train a 12-layer model (GPT-1 sized), e.g. like this:
 
 ```
-OMP_NUM_THREADS=1 torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- \
+OMP_NUM_THREADS=1 uv run --locked --extra gpu torchrun --standalone --nproc_per_node=8 -m scripts.base_train -- \
     --depth=12 \
     --run="d12" \
     --model-tag="d12" \
@@ -113,8 +151,8 @@ nanochat does not use `torch.amp.autocast`. Instead, precision is managed explic
 You can override the default with the `NANOCHAT_DTYPE` environment variable:
 
 ```bash
-NANOCHAT_DTYPE=float32 python -m scripts.chat_cli -p "hello"   # force fp32
-NANOCHAT_DTYPE=bfloat16 torchrun --nproc_per_node=8 -m scripts.base_train  # force bf16
+NANOCHAT_DTYPE=float32 uv run --locked --extra cpu python -m scripts.chat_cli -p "hello"   # force fp32
+NANOCHAT_DTYPE=bfloat16 uv run --locked --extra gpu torchrun --nproc_per_node=8 -m scripts.base_train  # force bf16
 ```
 
 How it works: model weights are stored in fp32 (for optimizer precision), but our custom `Linear` layer casts them to `COMPUTE_DTYPE` during the forward pass. Embeddings are stored directly in `COMPUTE_DTYPE` to save memory. This gives us the same mixed-precision benefit as autocast but with full explicit control over what runs in which precision.

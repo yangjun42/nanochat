@@ -6,7 +6,10 @@ PROJECT="${CSC_PROJECT:-project_2017828}"
 USER_NAME="${CSC_USER:-yangjun1}"
 CAMPAIGN_ID="${CAMPAIGN_ID:?Set CAMPAIGN_ID to sync}"
 CACHE_ROOT="${NANOCHAT_CACHE_ROOT:-/scratch/${PROJECT}/${USER_NAME}/nanochat-cache}"
-LOCAL_OUT="${LOCAL_OUT:-/Users/yangju/Library/CloudStorage/OneDrive-UniversityofHelsinki/Projects/jun/fast-scaling-law-fitting-experiments/synthetic_poc/outputs/roihu/${CAMPAIGN_ID}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCALING_PROJECT_ROOT="${SCALING_PROJECT_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+EXPERIMENTS_ROOT="${SCALING_EXPERIMENTS_ROOT:-${SCALING_PROJECT_ROOT}/experiments}"
+LOCAL_OUT="${LOCAL_OUT:-${EXPERIMENTS_ROOT}/synthetic_poc/outputs/roihu/${CAMPAIGN_ID}}"
 
 mkdir -p "$LOCAL_OUT"
 rsync -av \
