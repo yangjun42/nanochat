@@ -107,6 +107,20 @@ def parse_log(path: Path | None) -> dict[str, float]:
         "val_bpb_final": r"val bpb:\s*([0-9.eE+-]+)",
     }
     out: dict[str, float] = {}
+    completed = re.findall(r"Prediction positions completed:\s*([0-9][0-9,]*)", text)
+    if completed:
+        out["prediction_positions_completed"] = float(completed[-1].replace(",", ""))
+    else:
+        # Older trainers lack an end-of-run position marker. A final saved
+        # checkpoint and the runtime batch/horizon together establish the
+        # consumed positions; a plan or a startup budget line alone does not.
+        saved_steps = re.findall(r"Saved model parameters to: [^\n]*model_([0-9]+)\.pt", text)
+        batch_sizes = re.findall(r"Total batch size ([0-9][0-9,]*) =>", text)
+        token_horizons = re.findall(r"Total number of training tokens:\s*([0-9][0-9,]*)", text)
+        if saved_steps and batch_sizes and token_horizons:
+            positions = int(saved_steps[-1]) * int(batch_sizes[-1].replace(",", ""))
+            if positions == int(token_horizons[-1].replace(",", "")):
+                out["prediction_positions_completed"] = float(positions)
     for key, pattern in patterns.items():
         matches = re.findall(pattern, text)
         if matches:
@@ -168,12 +182,13 @@ def merge_rows(
         train_log = _path_from_metric(train_metric, train_metrics_dir.parent / "train_logs", stage)
         eval_log = _path_from_metric(eval_metric, eval_metrics_dir.parent / "eval_logs", eval_stage)
 
+        train_log_metrics = parse_log(train_log)
         row: dict[str, Any] = dict(plan_row)
-        row.update(parse_log(train_log))
+        row.update(train_log_metrics)
         row.update(parse_log(eval_log))
         row.update(
             {
-                "D_actual": fnum(plan_row.get("target_tokens")),
+                "D_actual": fnum(train_log_metrics.get("prediction_positions_completed")),
                 "train_wall_seconds": fnum(train_metric.get("elapsed_seconds")),
                 "eval_wall_seconds": fnum(eval_metric.get("elapsed_seconds")),
                 "train_exit_code": train_metric.get("exit_code"),
@@ -227,8 +242,10 @@ def collect_campaign(
     fit_ready = [
         row
         for row in rows
-        if fnum(row.get("N_scaling")) is not None
-        and fnum(row.get("D_actual")) is not None
+        if row.get("train_exit_code") == 0
+        and row.get("eval_exit_code") == 0
+        and fnum(row.get("N_scaling")) is not None
+        and (fnum(row.get("D_actual")) or 0) > 0
         and fnum(row.get("val_bpb_final")) is not None
     ]
 

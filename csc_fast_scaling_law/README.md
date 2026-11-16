@@ -18,6 +18,17 @@ These files are the artifact boundary consumed by the scaling-law experiment
 repo. Raw logs and checkpoints should stay on Roihu or in ignored output
 folders.
 
+For new campaigns, use the [strict campaign contract](CONTRACT.md). The legacy
+array/sequence wrappers below remain available for historical plans. Their
+collector keeps incomplete rows in `metrics.csv`, but only successful train
+and eval rows with observed completion positions enter `fit_ready_cells.csv`.
+`D_actual` comes from the final training position, never the plan's token
+budget. Older logs are accepted when the final saved checkpoint step times
+the runtime batch size agrees with the runtime token horizon. Logs lacking
+that evidence need verification before they can be used for fitting.
+Legacy train wrappers refuse to skip an existing checkpoint directory merely
+because it contains files; use a fresh campaign/model tag for a retry.
+
 The scripts prepend `csc_fast_scaling_law/wandb_stub` to `PYTHONPATH` because the
 Roihu PyTorch container can contain an unrelated broken `wandb`/protobuf
 combination. This keeps `--run=dummy` jobs independent of system `wandb`.

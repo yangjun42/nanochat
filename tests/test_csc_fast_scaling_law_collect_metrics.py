@@ -3,8 +3,9 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+import pytest
 
-from csc_fast_scaling_law.collect_metrics import collect_campaign
+from csc_fast_scaling_law.collect_metrics import collect_campaign, parse_log
 
 
 def test_collect_campaign_writes_fit_ready_cells(tmp_path: Path) -> None:
@@ -65,7 +66,8 @@ def test_collect_campaign_writes_fit_ready_cells(tmp_path: Path) -> None:
     eval_logs.mkdir()
 
     (train_logs / "smoke_d2_i64_s0.log").write_text(
-        "N_total: 123456\nN_scaling: 45678\nflops_per_token_est: 987654\ntrain bpb: 1.23\n",
+        "N_total: 123456\nN_scaling: 45678\nflops_per_token_est: 987654\ntrain bpb: 1.23\n"
+        "Prediction positions completed: 33,554,432\n",
         encoding="utf-8",
     )
     (eval_logs / "bpb_smoke_d2_i64_s0.log").write_text("val bpb: 1.11\n", encoding="utf-8")
@@ -184,6 +186,7 @@ def test_collect_campaign_parses_current_base_train_parameter_table(tmp_path: Pa
                 "lm_head                 : 300,000",
                 "Estimated FLOPs per token: 1.234000e+06",
                 "Minimum validation bpb: 1.234500",
+                "Prediction positions completed: 33,554,432",
             ]
         ),
         encoding="utf-8",
@@ -266,7 +269,8 @@ def test_collect_campaign_preserves_eval_shard_bpb_values(tmp_path: Path) -> Non
     train_logs.mkdir()
     eval_logs.mkdir()
     (train_logs / "eval_shards.log").write_text(
-        "N_scaling: 1000\nflops_per_token_est: 2000\n",
+        "N_scaling: 1000\nflops_per_token_est: 2000\n"
+        "Prediction positions completed: 33,554,432\n",
         encoding="utf-8",
     )
     (eval_logs / "bpb_eval_shards.log").write_text(
@@ -365,3 +369,52 @@ def test_monitor_roihu_runs_local_ssh_preflight_before_remote_commands() -> None
 
     assert "csc_fast_scaling_law.ssh_preflight" in monitor_script
     assert "ROIHU_SSH_CERT" in monitor_script
+
+
+@pytest.mark.parametrize(
+    ("train_exit", "eval_exit", "completion", "expected_fit_rows"),
+    [(0, 0, True, 1), (1, 0, True, 0), (0, 1, True, 0),
+     (None, 0, True, 0), (0, None, True, 0), (0, 0, False, 0)],
+)
+def test_fit_ready_requires_success_and_observed_completion(
+    tmp_path, train_exit, eval_exit, completion, expected_fit_rows,
+):
+    plan = tmp_path / "plan.csv"
+    plan.write_text("stage,target_tokens\ns,1000\n", encoding="utf-8")
+    for name in ("train_metrics", "eval_metrics", "train_logs", "eval_logs"):
+        (tmp_path / name).mkdir()
+    train_text = "N_scaling: 100\nD_actual: 1000\nTotal number of training tokens: 1000\n"
+    if completion:
+        train_text += "Prediction positions completed: 128\n"
+    (tmp_path / "train_logs/s.log").write_text(train_text, encoding="utf-8")
+    (tmp_path / "eval_logs/bpb_s.log").write_text("val bpb: 1.25\n", encoding="utf-8")
+    for kind, stage, exit_code in (("train", "s", train_exit), ("eval", "bpb_s", eval_exit)):
+        if exit_code is not None:
+            (tmp_path / f"{kind}_metrics/stage_metrics.jsonl").write_text(
+                json.dumps({"stage": stage, "exit_code": exit_code}) + "\n",
+                encoding="utf-8",
+            )
+    outputs = collect_campaign(
+        plan_csv=plan, train_metrics_dir=tmp_path / "train_metrics",
+        eval_metrics_dir=tmp_path / "eval_metrics", out_dir=tmp_path / "out",
+    )
+    with outputs["fit_ready_cells_csv"].open(newline="", encoding="utf-8") as handle:
+        assert len(list(csv.DictReader(handle))) == expected_fit_rows
+    with outputs["metrics_csv"].open(newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["D_actual"] == ("128.0" if completion else "")
+    assert row["target_tokens"] == "1000"
+
+
+@pytest.mark.parametrize(("checkpoint_step", "expected"), [(64, 33554432.0), (32, None)])
+def test_legacy_completion_uses_final_checkpoint_and_runtime_geometry(
+    tmp_path, checkpoint_step, expected,
+):
+    log = tmp_path / "train.log"
+    log.write_text(
+        "Total number of training tokens: 33,554,432\n"
+        "Total batch size 524,288 => gradient accumulation steps: 4\n"
+        f"Saved model parameters to: /scratch/run/model_{checkpoint_step:06d}.pt\n",
+        encoding="utf-8",
+    )
+    assert parse_log(log).get("prediction_positions_completed") == expected

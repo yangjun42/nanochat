@@ -104,8 +104,9 @@ HEAD_DIM="${HEAD_DIM:-128}"
 MODEL_DIM="${MODEL_DIM:-}"
 checkpoint_dir="${NANOCHAT_BASE_DIR}/base_checkpoints/${MODEL_TAG}"
 if [ -d "$checkpoint_dir" ] && find "$checkpoint_dir" -maxdepth 1 -type f | grep -q .; then
-  echo "Checkpoint appears to exist, skipping: $checkpoint_dir"
-  exit 0
+  echo "ERROR: checkpoint files already exist; completion is unverified: $checkpoint_dir" >&2
+  echo "Use a fresh campaign/model tag, or the contract runner to validate completed tasks." >&2
+  exit 3
 fi
 
 seed_args=()
