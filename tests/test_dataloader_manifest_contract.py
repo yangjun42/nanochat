@@ -7,6 +7,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import torch
+import nanochat.dataloader as dataloader_module
 
 from nanochat.dataloader import (
     _deterministic_row_group_order,
@@ -21,6 +22,54 @@ class IntegerTokenizer:
     def encode(self, batch, prepend, num_threads):
         del num_threads
         return [[prepend, int(text)] for text in batch]
+
+
+@pytest.mark.parametrize("device", ["cuda:0", torch.device("cuda", 0)])
+def test_cuda_loader_waits_before_reusing_pinned_staging(monkeypatch, device):
+    events = []
+    real_empty = torch.empty
+    real_copy = torch.Tensor.copy_
+
+    def empty(*args, **kwargs):
+        if "pin_memory" in kwargs:
+            events.append(("pin_memory", kwargs.pop("pin_memory")))
+        if "device" in kwargs:
+            kwargs["device"] = "cpu"
+        return real_empty(*args, **kwargs)
+
+    def copy(tensor, source, non_blocking=False):
+        events.append(("copy", non_blocking))
+        return real_copy(tensor, source, non_blocking=non_blocking)
+
+    class Event:
+        def record(self, stream):
+            events.append(("record", stream))
+
+        def synchronize(self):
+            events.append(("wait", None))
+
+    monkeypatch.setattr(torch, "empty", empty)
+    monkeypatch.setattr(torch.Tensor, "copy_", copy)
+    monkeypatch.setattr(torch.cuda, "Event", Event)
+    monkeypatch.setattr(torch.cuda, "current_stream", lambda device: "copy-stream")
+    monkeypatch.setattr(
+        dataloader_module,
+        "_document_batches",
+        lambda *args, **kwargs: iter([(["1"], (0, 0, 1)), (["2"], (0, 1, 1))]),
+    )
+    loader = tokenizing_distributed_data_loader_with_state_bos_bestfit(
+        IntegerTokenizer(), B=1, T=1, split="train", device=device, buffer_size=1,
+    )
+    _, first_targets, _ = next(loader)
+    assert first_targets.item() == 1
+    _, second_targets, _ = next(loader)
+    assert second_targets.item() == 2
+    assert events == [
+        ("pin_memory", True),
+        ("copy", False), ("copy", False), ("copy", True), ("record", "copy-stream"),
+        ("wait", None),
+        ("copy", False), ("copy", False), ("copy", True), ("record", "copy-stream"),
+    ]
 
 
 def _write_parquet(path: Path, values: list[str]) -> None:

@@ -382,7 +382,8 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
 
     # Pre-allocate buffers once: layout is [inputs (B*T) | targets (B*T)]
     # This gives us contiguous views and a single HtoD transfer
-    use_cuda = device == "cuda"
+    device = torch.device(device)
+    use_cuda = device.type == "cuda"
     row_buffer = torch.empty((B, row_capacity), dtype=torch.long) # for building rows without creating Python lists
     cpu_buffer = torch.empty(2 * B * T, dtype=torch.long, pin_memory=use_cuda) # staging area (CPU)
     gpu_buffer = torch.empty(2 * B * T, dtype=torch.long, device=device) # on-device buffer
@@ -390,6 +391,7 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
     cpu_targets = cpu_buffer[B * T:].view(B, T)
     inputs = gpu_buffer[:B * T].view(B, T)
     targets = gpu_buffer[B * T:].view(B, T)
+    transfer_done = None
 
     while True:
         packing_before_batch = dict(packing_stats)
@@ -432,6 +434,11 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
                     pos += remaining
 
         # Copy to pinned CPU buffer, then single HtoD transfer
+        # The previous asynchronous copy may still be reading this persistent
+        # staging buffer. Packing into row_buffer can overlap it; overwriting
+        # cpu_buffer must wait until the transfer itself has completed.
+        if transfer_done is not None:
+            transfer_done.synchronize()
         cpu_inputs.copy_(row_buffer[:, :-1])
         cpu_targets.copy_(row_buffer[:, 1:])
 
@@ -468,6 +475,10 @@ def tokenizing_distributed_data_loader_with_state_bos_bestfit(
 
         # Single HtoD copy into persistent GPU buffer and yield
         gpu_buffer.copy_(cpu_buffer, non_blocking=use_cuda)
+        if use_cuda:
+            if transfer_done is None:
+                transfer_done = torch.cuda.Event()
+            transfer_done.record(torch.cuda.current_stream(device))
         yield inputs, targets, state_dict
         output_batch_index += 1
 

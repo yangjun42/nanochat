@@ -668,6 +668,7 @@ print0(f"Tokens / micro-batch: {world_tokens_per_fwdbwd:,}")
 print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {grad_accum_steps}")
 
 # Go!
+mfu = None  # no throughput observation when resuming an already completed run
 while True:
     last_step = step == num_iterations # loop runs num_iterations+1 times so that we can eval/save at the end
     flops_so_far = num_flops_per_token * total_batch_size * step
@@ -910,6 +911,7 @@ while True:
         gc.collect() # manually collect, just to be safe for very, very long runs
 
 # print a few more stats
+print0(f"Prediction positions completed: {step * total_batch_size:,}")
 print0(f"Peak memory usage: {get_max_memory() / 1024 / 1024:.2f}MiB")
 print0(f"Total training time: {total_training_time/60:.2f}m")
 if val_bpb is not None:
@@ -959,7 +961,7 @@ get_report().log(section="Base model training", data=[
         "Final validation bpb": val_bpb,
         "Final validation bpb by heldout shard": val_bpb_by_shard,
         "CORE metric estimate": results.get("core_metric", None),
-        "MFU %": f"{mfu:.2f}%",
+        "MFU %": f"{mfu:.2f}%" if mfu is not None else None,
         "Total training flops": f"{flops_so_far:e}",
         "Total training time": f"{total_training_time/60:.2f}m",
         "Peak memory usage": f"{get_max_memory() / 1024 / 1024:.2f}MiB",

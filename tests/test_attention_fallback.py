@@ -53,6 +53,43 @@ def test_fa3_loader_explicitly_trusts_only_the_pinned_repository(monkeypatch):
     }
 
 
+def test_fa3_loader_supports_locked_kernels_0117_api(monkeypatch):
+    observed = {}
+    interface = object()
+    fake_kernels = types.ModuleType("kernels")
+
+    # Match the real 0.11.7 signature; it has no trust_remote_code keyword.
+    def get_kernel(repo_id, revision=None, version=None, user_agent=None):
+        observed.update(repo_id=repo_id, revision=revision)
+        return types.SimpleNamespace(flash_attn_interface=interface)
+
+    fake_kernels.get_kernel = get_kernel
+    monkeypatch.setitem(sys.modules, "kernels", fake_kernels)
+    monkeypatch.delenv("NANOCHAT_FA3_LOCAL_DIR", raising=False)
+    monkeypatch.setenv("NANOCHAT_FA3_REVISION", "a" * 40)
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(fa_module.torch.cuda, "get_device_capability", lambda: (9, 0))
+
+    assert fa_module._load_flash_attention_3() is interface
+    assert observed == {"repo_id": "varunneal/flash-attention-3", "revision": "a" * 40}
+
+
+def test_fa3_optional_load_failure_reports_original_cause(monkeypatch):
+    fake_kernels = types.ModuleType("kernels")
+
+    def get_kernel(repo_id, *, trust_remote_code=False, revision=None):
+        raise ImportError("test extension ABI mismatch")
+
+    fake_kernels.get_kernel = get_kernel
+    monkeypatch.setitem(sys.modules, "kernels", fake_kernels)
+    monkeypatch.delenv("NANOCHAT_FA3_LOCAL_DIR", raising=False)
+    monkeypatch.setattr(fa_module.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(fa_module.torch.cuda, "get_device_capability", lambda: (9, 0))
+
+    with pytest.warns(RuntimeWarning, match="ImportError: test extension ABI mismatch"):
+        assert fa_module._load_flash_attention_3() is None
+
+
 def test_fa3_loader_prefers_content_addressed_local_variant(monkeypatch, tmp_path):
     revision = "b" * 40
     variant = tmp_path / revision / "torch210-cu130-aarch64"

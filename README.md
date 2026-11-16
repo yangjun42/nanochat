@@ -43,6 +43,19 @@ For questions about the repo, I recommend either using [DeepWiki](https://deepwi
   designates another durable target. Never overwrite immutable, manifest-bound
   campaign evidence.
 
+### Selected upstream fixes
+
+The research fork selectively incorporates checkpoint discovery from
+[`21a7774`](https://github.com/karpathy/nanochat/commit/21a7774eab3977a9e0629a2b47eb237cafe54a80),
+configured KV-cache dtype from
+[`ca366eb`](https://github.com/karpathy/nanochat/commit/ca366eb18dd23cb2e15072a1b5f3d76f2b7ac028),
+and optimizer dtype handling from
+[`e02b339`](https://github.com/karpathy/nanochat/commit/e02b33959d10abae597fd1cf7c4ba0f11f50ae31).
+These are adapted source changes, not a full upstream merge. The existing
+optimizer classes, Muon algorithm and training FLOPs definition remain in place.
+CPU regression checks do not establish compiled CUDA/MPS or multi-rank
+equivalence; upgraded formal campaigns must pass the existing GPU preflight.
+
 ## Time-to-GPT-2 Leaderboard
 
 Presently, the main focus of development is on tuning the pretraining stage, which takes the most amount of compute. Inspired by the modded-nanogpt repo and to incentivise progress and community collaboration, nanochat maintains a leaderboard for a "GPT-2 speedrun", which is the wall-clock time required to train a nanochat model to GPT-2 grade capability, as measured by the DCLM CORE score. The [runs/speedrun.sh](runs/speedrun.sh) script always reflects the reference way to train GPT-2 grade model and talk to it. The current leaderboard looks as follows:

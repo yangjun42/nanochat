@@ -14,6 +14,8 @@ Usage (drop-in replacement for FA3):
     y = flash_attn.flash_attn_with_kvcache(q, k_cache, v_cache, k=k, v=v, ...)
 """
 import os
+import inspect
+import warnings
 import torch
 import torch.nn.functional as F
 
@@ -105,16 +107,23 @@ def _load_flash_attention_3():
         # repositories. Formal runs additionally require a full pinned Git
         # revision and bind the resolved revision plus every loaded file hash in
         # the environment lock before training is allowed.
-        return get_kernel(
-            'varunneal/flash-attention-3',
-            trust_remote_code=True,
-            **kwargs,
-        ).flash_attn_interface
-    except Exception:
+        parameters = inspect.signature(get_kernel).parameters
+        if "trust_remote_code" in parameters or any(
+            parameter.kind == inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        ):
+            kwargs["trust_remote_code"] = True
+        return get_kernel('varunneal/flash-attention-3', **kwargs).flash_attn_interface
+    except Exception as exc:
         # An explicit formal local artifact is a contract, not a preference.
         # Missing, mismatched, or unloadable files must not silently select SDPA.
         if local_dir:
             raise
+        warnings.warn(
+            f"Flash Attention 3 could not load; using SDPA: {type(exc).__name__}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return None
 
 
