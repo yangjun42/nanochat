@@ -77,6 +77,9 @@ parser.add_argument("--scalar-lr", type=float, default=0.5, help="learning rate 
 parser.add_argument("--warmup-steps", type=int, default=40, help="number of steps for LR warmup")
 parser.add_argument("--muon-momentum-warmup-steps", type=int, default=400, help="number of steps for Muon momentum warmup")
 parser.add_argument("--weight-decay-horizon-tokens", type=int, default=-1, help="token horizon used to scale weight decay (-1 = legacy target-token horizon)")
+parser.add_argument("--weight-decay-schedule", type=str, default="cosine", choices=["cosine", "constant"], help="cosine = decay to zero over the run, constant = no dependence on the length of the run")
+parser.add_argument("--readout-steps", type=str, default="", help="comma-separated optimizer steps at which the val bpb of the current and of the averaged weights is evaluated and logged")
+parser.add_argument("--average-gammas", type=str, default="", help="comma-separated exponents g of running weight averages in which step t has weight proportional to t**g (empty = none)")
 parser.add_argument("--warmdown-ratio", type=float, default=0.65, help="ratio of iterations for LR warmdown")
 parser.add_argument("--final-lr-frac", type=float, default=0.05, help="final LR as fraction of initial LR")
 parser.add_argument("--resume-from-step", type=int, default=-1, help="resume training from this step (-1 = disable)")
@@ -94,6 +97,12 @@ if args.muon_momentum_warmup_steps < 0:
     parser.error("--muon-momentum-warmup-steps must be nonnegative")
 if args.weight_decay_horizon_tokens == 0 or args.weight_decay_horizon_tokens < -1:
     parser.error("--weight-decay-horizon-tokens must be -1 or positive")
+readout_steps = sorted({int(s) for s in args.readout_steps.split(",") if s.strip()})
+average_gammas = sorted({float(g) for g in args.average_gammas.split(",") if g.strip()})
+if any(s <= 0 for s in readout_steps) or any(g < 0 for g in average_gammas):
+    parser.error("--readout-steps must be positive and --average-gammas nonnegative")
+if average_gammas and not readout_steps:
+    parser.error("--average-gammas has no effect without --readout-steps")
 user_config = vars(args).copy()  # for logging
 # -----------------------------------------------------------------------------
 # Compute init and wandb logging
@@ -426,6 +435,22 @@ elif args.target_param_data_ratio > 0:
 else:
     raise ValueError("No training horizon specified")
 total_tokens = total_batch_size * num_iterations # the actual number of tokens we will train for
+
+# Readouts: at the listed steps the val bpb of the current weights and of each running average is
+# evaluated and logged, so that one run gives the loss at several training lengths. A running average
+# with exponent g gives step t a weight proportional to t**g; it does not depend on the length of the run.
+if readout_steps:
+    if readout_steps[-1] > num_iterations:
+        raise ValueError(f"readout step {readout_steps[-1]} is beyond the {num_iterations} iterations of the run")
+    if ddp_world_size != 1 or resuming:
+        raise ValueError("readouts need a single process and a run that is not resumed")
+readout_set = set(readout_steps)
+average_params = list(orig_model.parameters()) if average_gammas else []
+with torch.no_grad():
+    averages = {g: [p.detach().to(torch.float32).clone() for p in average_params] for g in average_gammas}
+print0(f"Weight decay schedule: {args.weight_decay_schedule}")
+print0(f"Readout steps: {readout_steps}")
+print0(f"Running weight averages (exponents): {average_gammas}")
 D_target = target_tokens if horizon_source in ("target_tokens", "target_param_data_ratio") else None
 D_actual = total_tokens
 print0(f"Horizon source: {horizon_source}")
@@ -454,8 +479,10 @@ def get_muon_momentum(it):
         warmdown_ratio=args.warmdown_ratio,
     )
 
-# Weight decay scheduler for Muon optimizer (cosine decay to zero over the course of training)
+# Weight decay scheduler for Muon optimizer (cosine decay to zero over the course of training, or constant)
 def get_weight_decay(it):
+    if args.weight_decay_schedule == "constant":
+        return weight_decay_scaled
     return weight_decay_scaled * weight_decay_multiplier(
         it, num_iterations=num_iterations
     )
@@ -491,6 +518,26 @@ print0(f"Total batch size {total_batch_size:,} => gradient accumulation steps: {
 while True:
     last_step = step == num_iterations # loop runs num_iterations+1 times so that we can eval/save at the end
     flops_so_far = num_flops_per_token * total_batch_size * step
+
+    # readout: val bpb of the current weights and of every running average, after `step` optimizer steps
+    if step in readout_set:
+        model.eval()
+        readout_eval_steps = args.eval_tokens // (args.device_batch_size * args.max_seq_len * ddp_world_size)
+        readout = {"step": step, "tokens": step * total_batch_size, "training_time": total_training_time}
+        with disable_fp8(model):
+            readout["raw_bpb"] = evaluate_bpb(model, build_val_loader(), readout_eval_steps, token_bytes)
+            for gamma, average in averages.items():
+                with torch.no_grad():
+                    current = [p.detach().clone() for p in average_params]
+                    for p, a in zip(average_params, average):
+                        p.copy_(a.to(p.dtype))
+                readout[f"avg{gamma:g}_bpb"] = evaluate_bpb(model, build_val_loader(), readout_eval_steps, token_bytes)
+                with torch.no_grad():
+                    for p, c in zip(average_params, current):
+                        p.copy_(c)
+                del current
+        print0("READOUT " + json.dumps(readout))
+        model.train()
 
     # once in a while: evaluate the val bpb (all ranks participate)
     if args.eval_every > 0 and (last_step or step % args.eval_every == 0):
@@ -613,6 +660,13 @@ while True:
     else:
         optimizer.step()
     model.zero_grad(set_to_none=True)
+    if averages:
+        # running averages after step + 1 optimizer steps: weight (g + 1) / (t + g) on the new weights
+        with torch.no_grad():
+            for gamma, average in averages.items():
+                new_weight = min(1.0, (gamma + 1.0) / (step + 1.0 + gamma))
+                for a, p in zip(average, average_params):
+                    a.lerp_(p.detach().to(torch.float32), new_weight)
     train_loss_f = train_loss.item() # .item() is a CPU-GPU sync point
     synchronize()
     t1 = time.time()
